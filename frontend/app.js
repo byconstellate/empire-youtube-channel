@@ -38,7 +38,7 @@ async function loadFootagePreviews(script) {
     const label = document.createElement("small"); label.textContent = "Preview footage, then approve one:"; box.appendChild(label);
     preview.candidates.forEach((candidate, index) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
-      const image = document.createElement("img"); image.src = candidate.image; image.alt = `Pexels candidate ${index + 1}`; button.appendChild(image);
+      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview Pexels candidate ${index + 1}`; button.appendChild(video);
       const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
       button.addEventListener("click", () => {
         scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
