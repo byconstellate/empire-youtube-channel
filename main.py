@@ -76,7 +76,7 @@ def process(script: dict) -> Path:
 
         if scene["scene_type"] == "video":
             print(f'Searching Pexels for "{scene["search_query"]}"...')
-            selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
+            selected = scene.get("selected_video") or choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
             create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path)
