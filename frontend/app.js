@@ -11,6 +11,7 @@ const count = document.querySelector("#scene-count");
 const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
+const previewButton = document.querySelector("#preview-footage");
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
@@ -65,6 +66,22 @@ async function loadScript() {
   }
 }
 loadButton.addEventListener("click", loadScript);
+async function findFootagePreviews() {
+  previewButton.disabled = true;
+  previewButton.textContent = "Finding footage…";
+  error.textContent = "";
+  try {
+    renderScenes(currentScript);
+    await loadFootagePreviews(currentScript);
+    previewButton.innerHTML = "Previews loaded ✓";
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : "Could not load footage previews.";
+  } finally {
+    previewButton.disabled = false;
+    window.setTimeout(() => { previewButton.innerHTML = "Find footage previews <span>↗</span>"; }, 2200);
+  }
+}
+previewButton.addEventListener("click", findFootagePreviews);
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
