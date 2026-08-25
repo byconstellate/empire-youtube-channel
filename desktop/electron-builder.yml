@@ -3,8 +3,7 @@ productName: EMPIRE YouTube Studio
 directories:
   output: release
 files:
-  - dist/public/**
-  - electron/**
+  - main.cjs
   - package.json
 mac:
   category: public.app-category.video
