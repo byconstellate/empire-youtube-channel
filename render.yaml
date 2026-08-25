@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: empire-youtube-channel
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: AUTO_APPROVE_FOOTAGE
+        value: "1"
+      - key: GOOGLE_TTS_LANGUAGE
+        value: en
