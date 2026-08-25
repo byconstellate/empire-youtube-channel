@@ -12,7 +12,7 @@ class PexelsError(RuntimeError):
     pass
 
 
-def search_videos(api_key: str, query: str, per_page: int = 5) -> list[dict[str, Any]]:
+def search_videos(api_key: str, query: str, per_page: int = 10) -> list[dict[str, Any]]:
     if not api_key:
         raise PexelsError("PEXELS_API_KEY is missing. Add it to your environment or .env file.")
 
