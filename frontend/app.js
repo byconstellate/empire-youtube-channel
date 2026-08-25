@@ -26,7 +26,22 @@ function renderScenes(script) {
     </article>`).join("");
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
-function loadScript() {\n  try {\n    const script = JSON.parse(input.value);\n    if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");\n    if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");\n    currentScript = script;\n    error.textContent = "";\n    renderScenes(script);\n    loadButton.innerHTML = "Script loaded ✓";\n    window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);\n  } catch (err) {\n    error.textContent = err instanceof Error ? err.message : "Could not load that script.";\n  }\n}\nloadButton.addEventListener("click", loadScript);\nscenes.addEventListener("click", (event) => {
+function loadScript() {
+  try {
+    const script = JSON.parse(input.value);
+    if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
+    if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");
+    currentScript = script;
+    error.textContent = "";
+    renderScenes(script);
+    loadButton.innerHTML = "Script loaded ✓";
+    window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : "Could not load that script.";
+  }
+}
+loadButton.addEventListener("click", loadScript);
+scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
   const actions = button.parentElement.querySelectorAll("button[data-action]");
