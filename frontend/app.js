@@ -48,7 +48,7 @@ async function loadFootagePreviews(script) {
     article.querySelector(".scene-copy").appendChild(box);
   });
 }
-function loadScript() {
+async function loadScript() {
   try {
     const script = JSON.parse(input.value);
     if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
