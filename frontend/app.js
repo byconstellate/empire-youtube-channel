@@ -26,6 +26,11 @@ function renderScenes(script) {
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
+function plainTextToScript(text) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error("Add at least one non-empty line to your script.");
+  return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "video" })) };
+}
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
 async function loadFootagePreviews(script) {
   const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(script) });
@@ -51,7 +56,8 @@ async function loadFootagePreviews(script) {
 }
 async function loadScript() {
   try {
-    const script = JSON.parse(input.value);
+    let script;
+    try { script = JSON.parse(input.value); } catch (parseError) { script = plainTextToScript(input.value); }
     if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
     if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");
     currentScript = script;
