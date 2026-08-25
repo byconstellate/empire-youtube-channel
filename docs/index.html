@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="EMPIRE YouTube video studio" />
+    <title>EMPIRE YouTube Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">E</span><span>EMPIRE</span><small>YOUTUBE STUDIO</small></div>
+        <div class="format-pill">LANDSCAPE <strong>1920 × 1080</strong></div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <p class="eyebrow">YOUR IDEAS, IN MOTION</p>
+          <h1>Make the message<br /><em>impossible to miss.</em></h1>
+          <p class="lede">Turn your coaching script into a polished YouTube video with a Google voice, approved footage, captions, and a clean landscape export.</p>
+        </div>
+        <div class="hero-orb" aria-hidden="true"><span>PLAY</span></div>
+      </section>
+
+      <section class="workspace">
+        <div class="panel script-panel">
+          <div class="panel-heading"><div><span class="step">01</span><h2>Your script</h2></div><span id="scene-count" class="muted">2 scenes · 10 sec</span></div>
+          <label class="upload">
+            <input id="script-file" type="file" accept=".json,application/json" />
+            <span class="upload-icon">↑</span><span><strong>Drop a JSON script here</strong><small>or click to browse · your script stays in this browser</small></span>
+          </label>
+          <textarea id="script-input" spellcheck="false" aria-label="JSON script"></textarea>
+          <button id="load-script" class="button button-dark">Load script <span>→</span></button>
+          <p id="script-error" class="error" role="alert"></p>
+        </div>
+
+        <div class="panel voice-panel">
+          <div class="panel-heading"><div><span class="step">02</span><h2>Google voice</h2></div><span class="status-dot">READY</span></div>
+          <label for="language">Voice language</label>
+          <select id="language">
+            <option value="en">English</option><option value="en-au">English (Australia)</option><option value="en-uk">English (UK)</option><option value="th">Thai</option>
+          </select>
+          <div class="voice-note"><span class="spark">✦</span><p><strong>Simple, natural narration.</strong><br />The renderer uses Google gTTS with one audio file per scene.</p></div>
+          <div class="export-detail"><span>OUTPUT</span><strong>MP4 · 1920 × 1080</strong></div>
+        </div>
+      </section>
+
+      <section class="panel scenes-panel">
+        <div class="panel-heading"><div><span class="step">03</span><h2>Scene lineup</h2></div><span class="muted">Review before you render</span></div>
+        <div id="scenes" class="scenes"></div>
+      </section>
+
+      <section class="render-bar">
+        <div><span class="render-icon">✦</span><div><strong id="render-title">Ready when you are</strong><small id="render-status">Load your script, review the scenes, then start the render.</small></div></div>
+        <button id="render-button" class="button button-pink">Start render <span>→</span></button>
+      </section>
+
+      <footer><span>EMPIRE VIDEO GENERATOR</span><span>Script → Voice → Footage → Captions → YouTube</span></footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
