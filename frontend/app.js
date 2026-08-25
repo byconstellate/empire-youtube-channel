@@ -87,8 +87,21 @@ renderButton.addEventListener("click", async () => {
   error.textContent = "";
   try {
     const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
-    if (!response.ok) throw new Error(await response.text() || "The renderer could not create the video.");
-    const blob = await response.blob();
+    if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
+    const job = await response.json();
+    let state = { status: "queued" };
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      const statusResponse = await fetch(job.status_url);
+      state = await statusResponse.json();
+      if (state.status === "failed") throw new Error(state.error || "Render failed.");
+      if (state.status === "complete") break;
+      status.textContent = `Rendering video… ${Math.round((attempt + 1) / 180 * 100)}%`;
+    }
+    if (state.status !== "complete") throw new Error("Render is taking longer than expected. Check the service logs.");
+    const downloadResponse = await fetch(job.download_url);
+    if (!downloadResponse.ok) throw new Error(await downloadResponse.text() || "The video download failed.");
+    const blob = await downloadResponse.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = `${currentScript.project_id}-landscape.mp4`; link.click();
     URL.revokeObjectURL(url);
