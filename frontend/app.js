@@ -26,6 +26,28 @@ function renderScenes(script) {
     </article>`).join("");
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
+async function loadFootagePreviews(script) {
+  const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(script) });
+  if (!response.ok) throw new Error(await response.text() || "Could not load Pexels previews.");
+  const data = await response.json();
+  data.scenes.forEach((preview) => {
+    const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
+    const article = [...scenes.querySelectorAll(".scene")].find((item) => item.dataset.scene === String(script.scenes.indexOf(scene)));
+    if (!scene || !article) return;
+    const box = document.createElement("div"); box.className = "footage-previews";
+    const label = document.createElement("small"); label.textContent = "Preview footage, then approve one:"; box.appendChild(label);
+    preview.candidates.forEach((candidate, index) => {
+      const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
+      const image = document.createElement("img"); image.src = candidate.image; image.alt = `Pexels candidate ${index + 1}`; button.appendChild(image);
+      const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
+      button.addEventListener("click", () => {
+        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
+      });
+      box.appendChild(button);
+    });
+    article.querySelector(".scene-copy").appendChild(box);
+  });
+}
 function loadScript() {
   try {
     const script = JSON.parse(input.value);
@@ -34,6 +56,8 @@ function loadScript() {
     currentScript = script;
     error.textContent = "";
     renderScenes(script);
+    loadButton.innerHTML = "Finding footage…";
+    await loadFootagePreviews(script);
     loadButton.innerHTML = "Script loaded ✓";
     window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
   } catch (err) {
