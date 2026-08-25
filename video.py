@@ -43,7 +43,7 @@ def caption_filter(text: str) -> str:
     prefix = f"{font}:" if font else ""
     return (
         f"drawtext={prefix}text='{_escape_drawtext(text)}':"
-        "fontcolor=white:fontsize=64:borderw=4:bordercolor=black:"
+        "fontcolor=0xff00ff:fontsize=64:borderw=4:bordercolor=black:"
         "x=(w-text_w)/2:y=h*0.72:line_spacing=12"
     )
 
