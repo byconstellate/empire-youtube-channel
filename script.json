@@ -1,0 +1,18 @@
+{
+  "project_id": "empire_test_001",
+  "scenes": [
+    {
+      "scene_id": "1",
+      "text": "your business doesn't need another strategy.",
+      "duration_seconds": 5,
+      "scene_type": "video",
+      "search_query": "woman working laptop business"
+    },
+    {
+      "scene_id": "2",
+      "text": "it needs you to actually pick one.",
+      "duration_seconds": 5,
+      "scene_type": "text"
+    }
+  ]
+}
