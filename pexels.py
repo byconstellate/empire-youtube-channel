@@ -1,5 +1,6 @@
 """Pexels search, approval, and download helpers."""
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,10 @@ def search_videos(api_key: str, query: str, per_page: int = 5) -> list[dict[str,
 
 
 def choose_video(candidates: list[dict[str, Any]], scene_id: str) -> dict[str, Any]:
-    """Show candidate URLs and let the user approve or reject each one."""
+    """Choose footage interactively locally, or automatically on Render."""
+    if os.getenv("AUTO_APPROVE_FOOTAGE", "").lower() in {"1", "true", "yes"}:
+        return candidates[0]
+
     for index, video in enumerate(candidates, start=1):
         files = video.get("video_files", [])
         preview = next((item for item in files if item.get("width", 0) > item.get("height", 0)), None)
