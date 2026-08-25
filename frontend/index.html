@@ -27,8 +27,8 @@
         <div class="panel script-panel">
           <div class="panel-heading"><div><span class="step">01</span><h2>Your script</h2></div><span id="scene-count" class="muted">2 scenes · 10 sec</span></div>
           <label class="upload">
-            <input id="script-file" type="file" accept=".json,application/json" />
-            <span class="upload-icon">↑</span><span><strong>Drop a JSON script here</strong><small>or click to browse · your script stays in this browser</small></span>
+            <input id="script-file" type="file" accept=".json,.txt,application/json,text/plain" />
+            <span class="upload-icon">↑</span><span><strong>Drop a JSON or plain-text script here</strong><small>one line = one video search · your script stays in this browser</small></span>
           </label>
           <textarea id="script-input" spellcheck="false" aria-label="JSON script"></textarea>
           <div class="script-actions"><button id="load-script" type="button" class="button button-dark">Load script <span>→</span></button><button id="preview-footage" type="button" class="button button-pink">Find footage previews <span>↗</span></button></div>
@@ -58,6 +58,6 @@
 
       <footer><span>EMPIRE VIDEO GENERATOR</span><span>Script → Voice → Footage → Captions → YouTube</span></footer>
     </main>
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>
