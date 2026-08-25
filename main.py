@@ -1,4 +1,4 @@
-"""Empire video generator: script -> voice -> approved footage -> MP4."""
+"""Empire landscape video generator: script -> voice -> approved footage -> MP4."""
 
 import argparse
 import json
@@ -91,7 +91,7 @@ def process(script: dict) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create an Empire vertical coaching video.")
+    parser = argparse.ArgumentParser(description="Create an Empire landscape coaching video.")
     parser.add_argument("script", type=Path, help="Path to a JSON scene script.")
     args = parser.parse_args()
     try:
