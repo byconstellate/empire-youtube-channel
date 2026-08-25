@@ -1,0 +1,13 @@
+appId: com.empire.youtube.studio
+productName: EMPIRE YouTube Studio
+directories:
+  output: release
+files:
+  - dist/public/**
+  - electron/**
+  - package.json
+mac:
+  category: public.app-category.video
+  target:
+    - dmg
+    - zip
