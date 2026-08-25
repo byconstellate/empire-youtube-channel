@@ -20,7 +20,7 @@ function renderScenes(script) {
     <article class="scene" data-scene="${index}">
       <span class="scene-number">${String(index + 1).padStart(2, "0")}</span>
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
-        ${scene.scene_type === "video" ? '<div class="scene-actions"><button data-action="approve">Approve footage</button><button data-action="reject">Reject candidate</button></div>' : ""}
+        ${scene.scene_type === "video" ? '<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>' : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
@@ -38,9 +38,17 @@ document.querySelector("#script-file").addEventListener("change", async (event) 
   input.value = await file.text(); loadScript();
 });
 scenes.addEventListener("click", (event) => {
-  const button = event.target.closest("button"); if (!button) return;
-  button.classList.toggle(button.dataset.action === "approve" ? "approved" : "rejected");
-  button.textContent = button.classList.contains(button.dataset.action === "approve" ? "approved" : "rejected") ? (button.dataset.action === "approve" ? "Approved" : "Rejected") : (button.dataset.action === "approve" ? "Approve footage" : "Reject candidate");
+  const button = event.target.closest("button[data-action]"); if (!button) return;
+  event.preventDefault();
+  const actions = button.parentElement.querySelectorAll("button[data-action]");
+  const approved = button.dataset.action === "approve";
+  actions.forEach((action) => {
+    const selected = action === button;
+    action.classList.toggle("approved", selected && approved);
+    action.classList.toggle("rejected", selected && !approved);
+    action.setAttribute("aria-pressed", String(selected));
+    action.textContent = selected ? (approved ? "Approved" : "Rejected") : (action.dataset.action === "approve" ? "Approve footage" : "Reject candidate");
+  });
 });
 renderButton.addEventListener("click", () => {
   const title = document.querySelector("#render-title");
