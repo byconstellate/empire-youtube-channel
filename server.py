@@ -53,7 +53,7 @@ def preview():
         for scene in payload["scenes"]:
             if scene.get("scene_type") != "video":
                 continue
-            candidates = search_videos(os.getenv("PEXELS_API_KEY", ""), scene.get("search_query", ""))
+            candidates = search_videos(os.getenv("PEXELS_API_KEY", ""), scene.get("text", ""))
             compact = []
             for video in candidates:
                 files = video.get("video_files", [])
