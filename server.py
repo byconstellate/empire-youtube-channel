@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 from config import GOOGLE_TTS_LANGUAGE
+from pexels import search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 jobs = {}
@@ -41,6 +42,28 @@ def run_render(job_id: str, payload: dict) -> None:
     finally:
         if script_path:
             script_path.unlink(missing_ok=True)
+
+@app.post("/api/preview")
+def preview():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("scenes"), list):
+        return jsonify(error="Script must contain a scenes array."), 400
+    previews = []
+    try:
+        for scene in payload["scenes"]:
+            if scene.get("scene_type") != "video":
+                continue
+            candidates = search_videos(os.getenv("PEXELS_API_KEY", ""), scene.get("search_query", ""))
+            compact = []
+            for video in candidates:
+                files = video.get("video_files", [])
+                preview = next((item for item in files if item.get("width", 0) <= item.get("height", 0)), None) or (files[0] if files else {})
+                compact.append({"id": video.get("id"), "image": video.get("image", ""), "duration": video.get("duration"), "preview_url": preview.get("link", ""), "video_files": files})
+            previews.append({"scene_id": str(scene.get("scene_id")), "candidates": compact})
+    except Exception as exc:
+        return jsonify(error=str(exc)), 422
+    return jsonify(scenes=previews)
+
 
 @app.post("/api/render")
 def render():
