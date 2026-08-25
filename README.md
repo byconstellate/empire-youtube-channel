@@ -76,6 +76,6 @@ The finished video appears at:
 projects/<project_id>/output/final.mp4
 ```
 
-The default format is 1080×1920, 9:16, MP4. Change `VIDEO_WIDTH`, `VIDEO_HEIGHT`, and `VIDEO_FPS` in the environment when needed.
+The default format is 1920×1080 landscape MP4 for YouTube. Change `VIDEO_WIDTH`, `VIDEO_HEIGHT`, and `VIDEO_FPS` in the environment when needed.
 
 Generated audio, downloaded footage, and finished videos are ignored by git.
