@@ -18,7 +18,7 @@ function renderScenes(script) {
   count.textContent = `${script.scenes.length} scenes · ${total} sec`;
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
-      <span class="scene-number">${String(index + 1).padStart(2, "0")}</span>
+      <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
         ${scene.scene_type === "video" ? '<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>' : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
@@ -50,11 +50,23 @@ scenes.addEventListener("click", (event) => {
     action.textContent = selected ? (approved ? "Approved" : "Rejected") : (action.dataset.action === "approve" ? "Approve footage" : "Reject candidate");
   });
 });
-renderButton.addEventListener("click", () => {
+renderButton.addEventListener("click", async () => {
   const title = document.querySelector("#render-title");
   const status = document.querySelector("#render-status");
   renderButton.disabled = true; renderButton.textContent = "Rendering…";
-  title.textContent = "Render queued"; status.textContent = "The browser prototype is ready for the Python renderer.";
-  setTimeout(() => { title.textContent = "Ready for the renderer"; status.textContent = `Your ${currentScript.scenes.length}-scene landscape video will export to MP4 at 1920 × 1080.`; renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }, 1100);
+  title.textContent = "Creating your video";
+  status.textContent = "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…";
+  error.textContent = "";
+  try {
+    const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
+    if (!response.ok) throw new Error(await response.text() || "The renderer could not create the video.");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = `${currentScript.project_id}-landscape.mp4`; link.click();
+    URL.revokeObjectURL(url);
+    title.textContent = "Video created"; status.textContent = "Your horizontal 1920 × 1080 MP4 has downloaded.";
+  } catch (err) {
+    title.textContent = "Render failed"; status.textContent = ""; error.textContent = err.message;
+  } finally { renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }
 });
 renderScenes(currentScript);
