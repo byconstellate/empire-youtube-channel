@@ -1,43 +1,78 @@
-"""Small web wrapper for the Empire video renderer."""
+"""Web wrapper for the Empire video renderer."""
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
+import uuid
 from pathlib import Path
-
 from flask import Flask, jsonify, request, send_file
-
 from config import GOOGLE_TTS_LANGUAGE
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
+jobs = {}
+jobs_lock = threading.Lock()
 
 @app.get("/")
 def index():
     return app.send_static_file("index.html")
+
+def run_render(job_id: str, payload: dict) -> None:
+    script_path = None
+    try:
+        language = payload.pop("language", GOOGLE_TTS_LANGUAGE)
+        if language:
+            os.environ["GOOGLE_TTS_LANGUAGE"] = str(language)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as script_file:
+            json.dump(payload, script_file)
+            script_path = Path(script_file.name)
+        completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "Render failed.")
+        output = Path("projects") / str(payload["project_id"]) / "output" / "final.mp4"
+        if not output.exists():
+            raise RuntimeError("Renderer finished without producing an MP4.")
+        with jobs_lock:
+            jobs[job_id] = {"status": "complete", "output": str(output)}
+    except Exception as exc:
+        with jobs_lock:
+            jobs[job_id] = {"status": "failed", "error": str(exc)}
+    finally:
+        if script_path:
+            script_path.unlink(missing_ok=True)
 
 @app.post("/api/render")
 def render():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify(error="Request body must be a JSON script."), 400
-    language = payload.pop("language", GOOGLE_TTS_LANGUAGE)
-    if language:
-        os.environ["GOOGLE_TTS_LANGUAGE"] = str(language)
-    try:
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as script_file:
-            json.dump(payload, script_file)
-            script_path = Path(script_file.name)
-        completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True)
-    finally:
-        if "script_path" in locals():
-            script_path.unlink(missing_ok=True)
-    if completed.returncode != 0:
-        return jsonify(error=completed.stderr.strip() or completed.stdout.strip() or "Render failed."), 422
-    output = Path("projects") / str(payload["project_id"]) / "output" / "final.mp4"
-    if not output.exists():
-        return jsonify(error="Renderer finished without producing an MP4."), 500
-    return send_file(output, mimetype="video/mp4", as_attachment=True, download_name=f"{payload['project_id']}-landscape.mp4")
+    if not payload.get("project_id") or not isinstance(payload.get("scenes"), list):
+        return jsonify(error="Script must contain a project_id and scenes array."), 400
+    job_id = uuid.uuid4().hex
+    with jobs_lock:
+        jobs[job_id] = {"status": "queued"}
+    threading.Thread(target=run_render, args=(job_id, payload), daemon=True).start()
+    return jsonify(job_id=job_id, status_url=f"/api/render/{job_id}", download_url=f"/api/render/{job_id}/download"), 202
+
+@app.get("/api/render/<job_id>")
+def render_status(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify(error="Render job not found."), 404
+    return jsonify({key: value for key, value in job.items() if key != "output"})
+
+@app.get("/api/render/<job_id>/download")
+def render_download(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify(error="Render job not found."), 404
+    if job.get("status") != "complete":
+        return jsonify(error="Render is not complete yet."), 409
+    output = Path(job["output"])
+    return send_file(output, mimetype="video/mp4", as_attachment=True, download_name=f"{output.parent.parent.name}-landscape.mp4")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False)
