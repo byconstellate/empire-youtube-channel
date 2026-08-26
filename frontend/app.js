@@ -145,7 +145,7 @@ renderButton.addEventListener("click", async () => {
     URL.revokeObjectURL(url);
     title.textContent = "Video created"; status.textContent = "Your horizontal 1920 × 1080 MP4 has downloaded.";
   } catch (err) {
-    title.textContent = "Render failed"; status.textContent = ""; error.textContent = err.message;
+    title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
   } finally { renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }
 });
 renderScenes(currentScript);
