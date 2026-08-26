@@ -12,6 +12,7 @@ const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
 const previewButton = document.querySelector("#preview-footage");
+const moreButton = document.querySelector("#more-footage");
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
@@ -32,8 +33,8 @@ function plainTextToScript(text) {
   return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "video" })) };
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
-async function loadFootagePreviews(script) {
-  const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(script) });
+async function loadFootagePreviews(script, expand = false) {
+  const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
   if (!response.ok) throw new Error(await response.text() || "Could not load Pexels previews.");
   const data = await response.json();
   data.scenes.forEach((preview) => {
@@ -88,6 +89,20 @@ async function findFootagePreviews() {
   }
 }
 previewButton.addEventListener("click", findFootagePreviews);
+moreButton.addEventListener("click", async () => {
+  moreButton.disabled = true;
+  moreButton.textContent = "Searching variations…";
+  error.textContent = "";
+  try {
+    await loadFootagePreviews(currentScript, true);
+    moreButton.innerHTML = "More variations loaded ✓";
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : "Could not load more footage.";
+  } finally {
+    moreButton.disabled = false;
+    window.setTimeout(() => { moreButton.innerHTML = "Find more variations <span>+</span>"; }, 2200);
+  }
+});
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
