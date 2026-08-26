@@ -1,153 +1,336 @@
-const sampleScript = {
-  project_id: "empire_youtube_channel",
-  scenes: [
-    { scene_id: "1", text: "Your business doesn't need another strategy.", duration_seconds: 5, scene_type: "video", search_query: "woman working laptop business" },
-    { scene_id: "2", text: "It needs you to actually pick one.", duration_seconds: 5, scene_type: "text" }
-  ]
-};
-const input = document.querySelector("#script-input");
-const scenes = document.querySelector("#scenes");
-const count = document.querySelector("#scene-count");
-const error = document.querySelector("#script-error");
-const renderButton = document.querySelector("#render-button");
-const loadButton = document.querySelector("#load-script");
-const previewButton = document.querySelector("#preview-footage");
-const moreButton = document.querySelector("#more-footage");
-let currentScript = sampleScript;
-input.value = JSON.stringify(sampleScript, null, 2);
+const initialParagraphs = [
+    "The best ideas are usually the ones we almost talk ourselves out of.",
+    "We wait for confidence to arrive before we make the thing.",
+    "But confidence is not a prerequisite. It is the receipt.",
+    "Publish the first version. Let the next one teach you how."
+    ];
 
-function renderScenes(script) {
-  const total = script.scenes.reduce((sum, scene) => sum + Number(scene.duration_seconds), 0);
-  count.textContent = `${script.scenes.length} scenes · ${total} sec`;
-  scenes.innerHTML = script.scenes.map((scene, index) => `
-    <article class="scene" data-scene="${index}">
-      <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
-      <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
-        ${scene.scene_type === "video" ? '<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>' : ""}
-      </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
-    </article>`).join("");
-}
-function plainTextToScript(text) {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) throw new Error("Add at least one non-empty line to your script.");
-  return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "video" })) };
-}
-function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
-async function loadFootagePreviews(script, expand = false) {
-  const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
-  if (!response.ok) throw new Error(await response.text() || "Could not load Pexels previews.");
-  const data = await response.json();
-  data.scenes.forEach((preview) => {
-    const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
-    const article = [...scenes.querySelectorAll(".scene")].find((item) => item.dataset.scene === String(script.scenes.indexOf(scene)));
-    if (!scene || !article) return;
-    const box = document.createElement("div"); box.className = "footage-previews";
-    const label = document.createElement("small"); label.textContent = "Preview footage, then approve one:"; box.appendChild(label);
-    preview.candidates.forEach((candidate, index) => {
-      const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
-      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview Pexels candidate ${index + 1}`; button.appendChild(video);
-      const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
-      button.addEventListener("click", () => {
-        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
-      });
-      box.appendChild(button);
+    const localVideos = [
+    { id: "local-1", title: "Hands on a concrete table", meta: "portrait · 4K", duration: 4, gradient: "linear-gradient(135deg, #1b2538, #d06452)" },
+    { id: "local-2", title: "Morning light through glass", meta: "portrait · 1080p", duration: 4, gradient: "linear-gradient(135deg, #2a3344, #b47b67)" },
+    { id: "local-3", title: "Person walking through a room", meta: "portrait · 4K", duration: 4, gradient: "linear-gradient(135deg, #172636, #496f78)" }
+    ];
+    const localGifs = [
+    { id: "gif-1", title: "Tiny spark", gradient: "radial-gradient(circle at 50% 42%, #ffd4a5 0 5%, transparent 6%), linear-gradient(135deg, #ff8f72, #493c63)" },
+    { id: "gif-2", title: "Soft loop", gradient: "radial-gradient(circle at 62% 38%, #b8f1dd 0 8%, transparent 9%), linear-gradient(135deg, #183b4f, #78a89c)" },
+    { id: "gif-3", title: "Electric line", gradient: "linear-gradient(135deg, #1c2030 40%, #f2b370 41% 45%, #1c2030 46% 52%, #ed7a6f 53% 57%, #1c2030 58%)" }
+    ];
+    const iconChoices = ["✦", "↗", "◎", "✳", "◌", "◆", "⌁", "✺"];
+    const sceneColors = ["coral", "teal", "mustard", "navy"];
+    let scenes = initialParagraphs.map((text, index) => ({
+    id: String(index + 1),
+    text,
+    duration: 5,
+    mediaType: index === 0 ? "video" : index === 1 ? "icon" : index === 2 ? "gif" : "previous",
+    searchQuery: index === 0 ? "quiet creative process" : text,
+    icon: iconChoices[index + 1],
+    overlay: index === 3 ? "icon" : "text",
+    selectedVideo: index === 0 ? localVideos[0] : null,
+    selectedGif: index === 2 ? localGifs[1] : null,
+    color: sceneColors[index % sceneColors.length],
+    videoResults: localVideos,
+    gifResults: localGifs,
+    searchNotice: ""
+    }));
+    let activeSceneId = "1";
+    let pendingSelection = "";
+    let isPlaying = false;
+    let previewTimer = null;
+
+    const scriptEditor = document.querySelector("#script-editor");
+    const makeSceneButton = document.querySelector("#make-scene-button");
+    const inspector = document.querySelector("#inspector");
+    const sceneStrip = document.querySelector("#scene-strip");
+    const toast = document.querySelector("#toast");
+
+    function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (character) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character];
     });
-    article.querySelector(".scene-copy").appendChild(box);
-  });
-}
-async function loadScript() {
-  try {
-    let script;
-    try { script = JSON.parse(input.value); } catch (parseError) { script = plainTextToScript(input.value); }
-    if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
-    if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");
-    currentScript = script;
-    error.textContent = "";
-    renderScenes(script);
-    loadButton.innerHTML = "Finding footage…";
-    await loadFootagePreviews(script);
-    loadButton.innerHTML = "Script loaded ✓";
-    window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load that script.";
-  }
-}
-loadButton.addEventListener("click", loadScript);
-async function findFootagePreviews() {
-  previewButton.disabled = true;
-  previewButton.textContent = "Finding footage…";
-  error.textContent = "";
-  try {
-    renderScenes(currentScript);
-    await loadFootagePreviews(currentScript);
-    previewButton.innerHTML = "Previews loaded ✓";
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load footage previews.";
-  } finally {
-    previewButton.disabled = false;
-    window.setTimeout(() => { previewButton.innerHTML = "Find footage previews <span>↗</span>"; }, 2200);
-  }
-}
-previewButton.addEventListener("click", findFootagePreviews);
-moreButton.addEventListener("click", async () => {
-  moreButton.disabled = true;
-  moreButton.textContent = "Searching variations…";
-  error.textContent = "";
-  try {
-    await loadFootagePreviews(currentScript, true);
-    moreButton.innerHTML = "More variations loaded ✓";
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load more footage.";
-  } finally {
-    moreButton.disabled = false;
-    window.setTimeout(() => { moreButton.innerHTML = "Find more variations <span>+</span>"; }, 2200);
-  }
-});
-scenes.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]"); if (!button) return;
-  event.preventDefault();
-  const actions = button.parentElement.querySelectorAll("button[data-action]");
-  const approved = button.dataset.action === "approve";
-  actions.forEach((action) => {
-    const selected = action === button;
-    action.classList.toggle("approved", selected && approved);
-    action.classList.toggle("rejected", selected && !approved);
-    action.setAttribute("aria-pressed", String(selected));
-    action.textContent = selected ? (approved ? "Approved" : "Rejected") : (action.dataset.action === "approve" ? "Approve footage" : "Reject candidate");
-  });
-});
-renderButton.addEventListener("click", async () => {
-  const title = document.querySelector("#render-title");
-  const status = document.querySelector("#render-status");
-  renderButton.disabled = true; renderButton.textContent = "Rendering…";
-  title.textContent = "Creating your video";
-  status.textContent = "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…";
-  error.textContent = "";
-  try {
-    const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
-    if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
-    if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
-    const job = await response.json();
-    let state = { status: "queued" };
-    for (let attempt = 0; attempt < 180; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      const statusResponse = await fetch(job.status_url);
-      if (!statusResponse.ok) { const detail = await statusResponse.text(); throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`); }
-      state = await statusResponse.json();
-      if (state.status === "failed") throw new Error(state.error || "Render failed.");
-      if (state.status === "complete") break;
-      status.textContent = `Rendering video… ${Math.round((attempt + 1) / 180 * 100)}%`;
     }
-    if (state.status !== "complete") throw new Error("Render is taking longer than expected. Check the service logs.");
-    const downloadResponse = await fetch(job.download_url);
-    if (!downloadResponse.ok) throw new Error(await downloadResponse.text() || "The video download failed.");
-    const blob = await downloadResponse.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = url; link.download = `${currentScript.project_id}-landscape.mp4`; link.click();
-    URL.revokeObjectURL(url);
-    title.textContent = "Video created"; status.textContent = "Your horizontal 1920 × 1080 MP4 has downloaded.";
-  } catch (err) {
-    title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
-  } finally { renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }
-});
-renderScenes(currentScript);
+    function activeScene() { return scenes.find(function (scene) { return scene.id === activeSceneId; }) || scenes[0]; }
+    function paragraphsToHtml(text) {
+    return text.split(/
+{2,}/).map(function (paragraph) { return "<p>" + escapeHtml(paragraph.trim()) + "</p>"; }).filter(Boolean).join("");
+    }
+    function syncEditorText() {
+    const text = Array.from(scriptEditor.querySelectorAll("p")).map(function (paragraph) { return paragraph.innerText.trim(); }).filter(Boolean).join("
+
+");
+    if (text) localStorage.setItem("empire-script-text", text);
+    }
+    function notify(message) {
+    toast.textContent = message;
+    toast.classList.add("show");
+    window.clearTimeout(notify.timer);
+    notify.timer = window.setTimeout(function () { toast.classList.remove("show"); }, 2400);
+    }
+    function totalDuration() { return scenes.reduce(function (sum, scene) { return sum + Number(scene.duration || 5); }, 0); }
+    function updateCounts() {
+    const words = scenes.map(function (scene) { return scene.text; }).join(" ").trim().split(/s+/).filter(Boolean).length;
+    const total = totalDuration();
+    document.querySelector("#scene-count").textContent = scenes.length + " SCENES";
+    document.querySelector("#strip-count").textContent = scenes.length + " / 8";
+    document.querySelector("#word-count").textContent = words + " words";
+    document.querySelector("#time-count").textContent = "Approx. " + String(total).padStart(2, "0") + ":00";
+    document.querySelector("#total-time").textContent = "00:" + String(total).padStart(2, "0") + " total";
+    document.querySelector("#canvas-time").textContent = "00:01 / 00:" + String(total).padStart(2, "0");
+    }
+    function saveState() {
+    try {
+      localStorage.setItem("empire-scenes", JSON.stringify(scenes));
+      document.querySelector("#save-state").innerHTML = '<span class="save-dot"></span> SAVED LOCALLY';
+    } catch (error) { document.querySelector("#save-state").textContent = " SAVED FOR THIS SESSION"; }
+    }
+    function sceneLabel(scene) {
+    return scene.mediaType === "previous" ? "PREVIOUS" : scene.mediaType.toUpperCase();
+    }
+    function sceneThumbStyle(scene) {
+    if (scene.mediaType === "video" && scene.selectedVideo && scene.selectedVideo.image) return "background-image:url('" + scene.selectedVideo.image + "')";
+    if (scene.mediaType === "icon") return "background:" + (scene.color === "teal" ? "linear-gradient(135deg,#1f6f73,#b9e4d7)" : "linear-gradient(135deg,#eb796b,#473e60)");
+    if (scene.mediaType === "gif") return "background:" + (scene.selectedGif?.gradient || "linear-gradient(135deg,#1b2638,#ef8871)");
+    return "background:linear-gradient(135deg,#17253a,#6a8f8d)";
+    }
+    function renderSceneStrip() {
+    sceneStrip.innerHTML = scenes.map(function (scene, index) {
+      const activeClass = scene.id === activeSceneId ? " active" : "";
+      return '<button type="button" class="strip-card' + activeClass + '" data-scene-id="' + scene.id + '" style="' + sceneThumbStyle(scene) + '">' +
+        '<span class="strip-card-top"><b>' + String(index + 1).padStart(2, "0") + '</b><span>' + scene.duration + 's</span></span>' +
+        '<span class="strip-card-bottom"><strong>' + escapeHtml(sceneLabel(scene)) + '</strong><small>' + escapeHtml(scene.text.slice(0, 24)) + (scene.text.length > 24 ? "…" : "") + '</small></span>' +
+        '</button>';
+    }).join("") + '<button type="button" class="strip-add" id="strip-add">+<small>Add scene</small></button>';
+    }
+    function renderScript() {
+    const paragraphs = scenes.map(function (scene) {
+      const isActive = scene.id === activeSceneId ? " active-paragraph" : "";
+      return '<p class="' + isActive.trim() + '" data-scene-id="' + scene.id + '">' + escapeHtml(scene.text) + '</p>';
+    }).join("");
+    scriptEditor.innerHTML = paragraphs;
+    }
+    function previewBackground(scene) {
+    if (!scene) return "linear-gradient(135deg,#18243a,#d56e5f)";
+    if (scene.mediaType === "video" && scene.selectedVideo && scene.selectedVideo.image) return "linear-gradient(135deg,rgba(20,28,45,.35),rgba(205,91,75,.75)),url('" + scene.selectedVideo.image + "') center/cover";
+    if (scene.mediaType === "icon") return scene.color === "teal" ? "radial-gradient(circle at 70% 22%,#f4cfaa 0 5%,transparent 6%),linear-gradient(135deg,#17535d,#a1d0bf)" : "radial-gradient(circle at 72% 25%,#ffc17f 0 5%,transparent 6%),linear-gradient(135deg,#1b293e,#d26f60)";
+    if (scene.mediaType === "gif") return scene.selectedGif?.gradient || "linear-gradient(135deg,#263d54,#dd886e)";
+    const previous = scenes[Math.max(0, scenes.indexOf(scene) - 1)];
+    return previous ? previewBackground(previous) : "linear-gradient(135deg,#1b293f,#d26f60)";
+    }
+    function renderPreview() {
+    const scene = activeScene();
+    if (!scene) return;
+    document.querySelector("#video-preview").style.background = previewBackground(scene);
+    document.querySelector("#preview-text").textContent = scene.text;
+    document.querySelector("#preview-number").textContent = String(scenes.indexOf(scene) + 1).padStart(2, "0");
+    document.querySelector("#preview-category").textContent = sceneLabel(scene) + " / " + (scene.mediaType === "video" ? "MORNING" : "SCENE " + scene.id);
+    const previewContent = document.querySelector("#preview-content");
+    previewContent.classList.toggle("icon-preview", scene.mediaType === "icon");
+    previewContent.classList.toggle("gif-preview", scene.mediaType === "gif");
+    previewContent.classList.toggle("previous-preview", scene.mediaType === "previous");
+    const oldIcon = previewContent.querySelector(".preview-icon");
+    if (oldIcon) oldIcon.remove();
+    if (scene.mediaType === "icon" || (scene.mediaType === "previous" && scene.overlay === "icon")) {
+      const icon = document.createElement("span");
+      icon.className = "preview-icon";
+      icon.textContent = scene.icon || "✦";
+      previewContent.insertBefore(icon, previewContent.firstChild);
+    }
+    const oldGif = previewContent.querySelector(".preview-gif");
+    if (oldGif) oldGif.remove();
+    if (scene.mediaType === "gif" || (scene.mediaType === "previous" && scene.overlay === "gif")) {
+      const gif = document.createElement("span");
+      gif.className = "preview-gif";
+      gif.textContent = "GIF";
+      previewContent.insertBefore(gif, previewContent.firstChild);
+    }
+    document.querySelector("#preview-caption");
+    }
+    function mediaButton(scene, type, title, note, icon) {
+    return '<button type="button" class="media-choice ' + (scene.mediaType === type ? "selected" : "") + '" data-media-type="' + type + '"><span class="media-icon">' + icon + '</span><span><b>' + title + '</b><small>' + note + '</small></span></button>';
+    }
+    function renderVideoPicker(scene) {
+    const results = scene.videoResults || localVideos;
+    return '<div class="picker-section"><div class="picker-heading"><span>FIND FOOTAGE</span><span class="provider-chip">PEXELS</span></div>' +
+      '<div class="search-row"><input id="video-query" value="' + escapeHtml(scene.searchQuery || "quiet creative process") + '" aria-label="Search Pexels videos" /><button id="video-search" type="button" aria-label="Search Pexels">⌕</button></div>' +
+      (scene.searchNotice ? '<p class="picker-notice">' + escapeHtml(scene.searchNotice) + '</p>' : '') +
+      '<div class="video-results">' + results.map(function (video) {
+        const selected = scene.selectedVideo && scene.selectedVideo.id === video.id ? " selected" : "";
+        return '<button type="button" class="video-result' + selected + '" data-video-id="' + escapeHtml(video.id) + '"><span class="result-image" style="background:' + (video.gradient || "linear-gradient(135deg,#202a3f,#cc786c)") + (video.image ? ";background-image:url('" + escapeHtml(video.image) + "')" : "") + '"><i>' + (video.duration || 4) + 's</i></span><span><b>' + escapeHtml(video.title || "Pexels footage") + '</b><small>' + escapeHtml(video.meta || "portrait") + '</small></span></button>';
+      }).join("") + '</div><span class="powered">Powered by Pexels <b>↗</b></span></div>';
+    }
+    function renderIconPicker(scene) {
+    return '<div class="picker-section"><div class="picker-heading"><span>CHOOSE AN ICON</span><span class="provider-chip warm">SYMBOL</span></div><div class="icon-grid">' + iconChoices.map(function (icon) {
+      return '<button type="button" class="icon-choice ' + (scene.icon === icon ? "selected" : "") + '" data-icon="' + icon + '">' + icon + '</button>';
+    }).join("") + '</div><p class="field-note">Pick a mark that reinforces the feeling of this thought.</p></div>';
+    }
+    function renderGifPicker(scene) {
+    const results = scene.gifResults || localGifs;
+    return '<div class="picker-section"><div class="picker-heading"><span>FIND A LOOP</span><span class="provider-chip violet">GIF</span></div><div class="search-row"><input id="gif-query" placeholder="Search loops" value="" aria-label="Search GIFs" /><button id="gif-search" type="button" aria-label="Search GIFs">⌕</button></div><div class="gif-results">' + results.map(function (gif) {
+      const selected = scene.selectedGif && scene.selectedGif.id === gif.id ? " selected" : "";
+      return '<button type="button" class="gif-result' + selected + '" data-gif-id="' + gif.id + '" style="background:' + gif.gradient + '"><span>' + escapeHtml(gif.title) + '</span><b>GIF</b></button>';
+    }).join("") + '</div><label class="url-field">Or paste a GIF URL<input id="custom-gif" type="url" placeholder="https://…" /></label><p class="field-note">Loops sit above the scene while the text remains readable.</p></div>';
+    }
+    function renderPreviousPicker(scene) {
+    return '<div class="picker-section"><div class="picker-heading"><span>REUSE THIS VISUAL</span><span class="provider-chip">PREVIOUS</span></div><div class="reuse-card"><span class="reuse-thumb" style="' + sceneThumbStyle(scenes[Math.max(0, scenes.indexOf(scene) - 1)]) + '"></span><div><b>Scene ' + String(Math.max(1, scenes.indexOf(scene))).padStart(2, "0") + ' background</b><small>Keep the visual language moving</small></div></div><div class="overlay-heading">ADD AN OVERLAY</div><div class="overlay-options">' + ["text", "icon", "gif"].map(function (option) { return '<button type="button" class="overlay-choice ' + (scene.overlay === option ? "selected" : "") + '" data-overlay="' + option + '">' + option.charAt(0).toUpperCase() + option.slice(1) + '</button>'; }).join("") + '</div><p class="field-note">Reuse the previous background and change only what sits on top.</p></div>';
+    }
+    function renderInspector() {
+    const scene = activeScene();
+    if (!scene) return;
+    let picker = scene.mediaType === "video" ? renderVideoPicker(scene) : scene.mediaType === "icon" ? renderIconPicker(scene) : scene.mediaType === "gif" ? renderGifPicker(scene) : renderPreviousPicker(scene);
+    inspector.innerHTML = '<div class="inspector-header"><div><span class="inspector-kicker">SCENE ' + String(scenes.indexOf(scene) + 1).padStart(2, "0") + '</span><h2>' + escapeHtml(scene.text.split(" ").slice(0, 4).join(" ")) + (scene.text.split(" ").length > 4 ? "…" : "") + '</h2></div><button class="round-button" id="scene-menu" type="button">•••</button></div><div class="inspector-tabs"><span class="active">MEDIA</span><span>TYPE</span></div><div class="treatment-label">VISUAL TREATMENT</div><div class="media-choices">' + mediaButton(scene, "video", "Video", "Pexels footage", "▦") + mediaButton(scene, "icon", "Icon", "Symbolic mark", "✦") + mediaButton(scene, "gif", "GIF", "Looping moment", "▣") + mediaButton(scene, "previous", "Previous", "Reuse visual", "◫") + '</div>' + picker + '<div class="duration-control"><label for="duration">SCENE LENGTH</label><div><input id="duration" type="range" min="2" max="12" value="' + scene.duration + '" /><output id="duration-value">' + scene.duration + ' sec</output></div></div>';
+    }
+    function renderAll() {
+    renderScript();
+    renderSceneStrip();
+    renderPreview();
+    renderInspector();
+    updateCounts();
+    saveState();
+    }
+    function setActive(id) {
+    activeSceneId = String(id);
+    pendingSelection = "";
+    makeSceneButton.disabled = true;
+    renderAll();
+    }
+    function splitSelection() {
+    const selected = pendingSelection.trim();
+    if (!selected) return;
+    let didSplit = false;
+    const nextScenes = [];
+    scenes.forEach(function (scene) {
+      if (!didSplit && scene.text.includes(selected)) {
+        const pieces = scene.text.split(selected);
+        if (pieces[0].trim()) nextScenes.push(Object.assign({}, scene, { id: scene.id + "a", text: pieces[0].trim() }));
+        const newScene = Object.assign({}, scene, { id: scene.id + "-new-" + Date.now(), text: selected, mediaType: "video", selectedVideo: localVideos[0], videoResults: localVideos });
+        nextScenes.push(newScene);
+        if (pieces.slice(1).join(selected).trim()) nextScenes.push(Object.assign({}, scene, { id: scene.id + "b", text: pieces.slice(1).join(selected).trim() }));
+        activeSceneId = newScene.id;
+        didSplit = true;
+      } else nextScenes.push(scene);
+    });
+    if (!didSplit) {
+      const newScene = { id: "new-" + Date.now(), text: selected, duration: 5, mediaType: "video", searchQuery: selected, icon: "✦", overlay: "text", selectedVideo: localVideos[0], selectedGif: null, color: "coral", videoResults: localVideos, gifResults: localGifs, searchNotice: "" };
+      scenes.push(newScene);
+      activeSceneId = newScene.id;
+    } else scenes = nextScenes;
+    pendingSelection = "";
+    renderAll();
+    notify("New scene created from your highlight");
+    }
+    async function searchPexels() {
+    const scene = activeScene();
+    const input = document.querySelector("#video-query");
+    const query = input ? input.value.trim() : scene.text;
+    if (!query) return;
+    scene.searchQuery = query;
+    scene.searchNotice = "Searching Pexels…";
+    renderInspector();
+    try {
+      const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: "empire_visual_editor", scenes: [{ scene_id: scene.id, text: query, duration_seconds: scene.duration, scene_type: "video", search_query: query }] }) });
+      if (!response.ok) throw new Error("Pexels is not connected");
+      const data = await response.json();
+      const found = data.scenes && data.scenes[0] && data.scenes[0].candidates ? data.scenes[0].candidates : [];
+      if (!found.length) throw new Error("No Pexels footage found");
+      scene.videoResults = found.map(function (video, index) { return { id: String(video.id), title: "Pexels result " + (index + 1), meta: "portrait · Pexels", duration: video.duration || 4, image: video.image, preview_url: video.preview_url, video_files: video.video_files }; });
+      scene.selectedVideo = scene.videoResults[0];
+      scene.searchNotice = "Live Pexels results";
+    } catch (error) {
+      scene.videoResults = localVideos;
+      scene.selectedVideo = scene.videoResults[0];
+      scene.searchNotice = "Showing studio samples. Add PEXELS_API_KEY for live results.";
+    }
+    renderInspector();
+    renderSceneStrip();
+    renderPreview();
+    saveState();
+    }
+    function addThought() {
+    const id = "new-" + Date.now();
+    const scene = { id, text: "Write the next thought here.", duration: 5, mediaType: "video", searchQuery: "creative process", icon: "✦", overlay: "text", selectedVideo: localVideos[0], selectedGif: null, color: "teal", videoResults: localVideos, gifResults: localGifs, searchNotice: "" };
+    scenes.push(scene);
+    activeSceneId = id;
+    renderAll();
+    const last = scriptEditor.querySelector("p:last-child");
+    if (last) { last.focus(); const range = document.createRange(); range.selectNodeContents(last); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); }
+    }
+    function togglePlayback() {
+    isPlaying = !isPlaying;
+    document.querySelector("#preview-play").textContent = isPlaying ? "Ⅱ" : "▶";
+    document.querySelector("#preview-toggle").innerHTML = isPlaying ? '<span class="button-icon">Ⅱ</span> Pause' : '<span class="button-icon">▶</span> Preview';
+    document.querySelector("#video-preview").classList.toggle("playing", isPlaying);
+    if (isPlaying) {
+      let index = scenes.findIndex(function (scene) { return scene.id === activeSceneId; });
+      previewTimer = window.setInterval(function () { index = (index + 1) % scenes.length; setActive(scenes[index].id); }, 2600);
+    } else { window.clearInterval(previewTimer); }
+    }
+    async function exportVideo() {
+    const button = document.querySelector("#export-button");
+    button.disabled = true;
+    button.innerHTML = '<span class="button-icon">…</span> Preparing';
+    const payload = { project_id: "empire_visual_editor", language: "en", scenes: scenes.map(function (scene) { return { scene_id: scene.id, text: scene.text, duration_seconds: scene.duration, media_type: scene.mediaType, scene_type: scene.mediaType === "video" ? "video" : "text", search_query: scene.searchQuery, selected_video: scene.selectedVideo && scene.selectedVideo.video_files ? scene.selectedVideo : undefined, icon: scene.icon, selected_gif: scene.selectedGif && scene.selectedGif.url ? scene.selectedGif.url : undefined, overlay: scene.overlay }; }) };
+    try {
+      const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error("The renderer could not start");
+      const job = await response.json();
+      notify("Render started — your video will download when ready");
+      let state = { status: "queued" };
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        await new Promise(function (resolve) { window.setTimeout(resolve, 2000); });
+        const statusResponse = await fetch(job.status_url);
+        state = await statusResponse.json();
+        if (state.status === "failed") throw new Error(state.error || "Render failed");
+        if (state.status === "complete") break;
+      }
+      if (state.status !== "complete") throw new Error("Render is taking longer than expected");
+      const download = await fetch(job.download_url);
+      if (!download.ok) throw new Error("The video download failed");
+      const link = document.createElement("a"); link.href = URL.createObjectURL(await download.blob()); link.download = "empire-visual-video.mp4"; link.click();
+      notify("Your video is ready");
+    } catch (error) { notify(error.message || "Export failed"); }
+    button.disabled = false;
+    button.innerHTML = '<span class="button-icon">↗</span> Export';
+    }
+
+    document.addEventListener("selectionchange", function () {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !scriptEditor.contains(selection.anchorNode)) {
+      pendingSelection = "";
+      makeSceneButton.disabled = true;
+      return;
+    }
+    pendingSelection = selection.toString().trim();
+    makeSceneButton.disabled = !pendingSelection;
+    });
+    scriptEditor.addEventListener("input", function () { syncEditorText(); document.querySelector("#save-state").innerHTML = '<span class="save-dot"></span> UNSAVED CHANGES'; });
+    scriptEditor.addEventListener("click", function (event) { const paragraph = event.target.closest("p[data-scene-id]"); if (paragraph) setActive(paragraph.dataset.sceneId); });
+    makeSceneButton.addEventListener("click", splitSelection);
+    document.querySelector("#add-paragraph").addEventListener("click", addThought);
+    document.querySelector("#preview-play").addEventListener("click", togglePlayback);
+    document.querySelector("#preview-toggle").addEventListener("click", togglePlayback);
+    document.querySelector("#export-button").addEventListener("click", exportVideo);
+    sceneStrip.addEventListener("click", function (event) { const card = event.target.closest("[data-scene-id]"); if (card) setActive(card.dataset.sceneId); if (event.target.closest("#strip-add")) addThought(); });
+    inspector.addEventListener("click", function (event) {
+    const scene = activeScene();
+    const mediaButton = event.target.closest("[data-media-type]");
+    if (mediaButton) { scene.mediaType = mediaButton.dataset.mediaType; renderAll(); return; }
+    const videoButton = event.target.closest("[data-video-id]");
+    if (videoButton) { scene.selectedVideo = (scene.videoResults || localVideos).find(function (video) { return String(video.id) === videoButton.dataset.videoId; }) || scene.selectedVideo; renderAll(); return; }
+    const iconButton = event.target.closest("[data-icon]");
+    if (iconButton) { scene.icon = iconButton.dataset.icon; renderAll(); return; }
+    const gifButton = event.target.closest("[data-gif-id]");
+    if (gifButton) { scene.selectedGif = (scene.gifResults || localGifs).find(function (gif) { return gif.id === gifButton.dataset.gifId; }) || scene.selectedGif; renderAll(); return; }
+    const overlayButton = event.target.closest("[data-overlay]");
+    if (overlayButton) { scene.overlay = overlayButton.dataset.overlay; renderAll(); return; }
+    if (event.target.closest("#video-search")) searchPexels();
+    if (event.target.closest("#gif-search")) { scene.searchNotice = "GIF search is ready for a provider connection."; renderInspector(); }
+    });
+    inspector.addEventListener("input", function (event) {
+    const scene = activeScene();
+    if (event.target.id === "duration") { scene.duration = Number(event.target.value); document.querySelector("#duration-value").textContent = scene.duration + " sec"; updateCounts(); saveState(); }
+    if (event.target.id === "video-query") scene.searchQuery = event.target.value;
+    });
+    scriptEditor.innerHTML = paragraphsToHtml(initialParagraphs.join("
+
+"));
+    renderAll();
+    
