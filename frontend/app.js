@@ -126,11 +126,13 @@ renderButton.addEventListener("click", async () => {
   try {
     const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
     if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
+    if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
     let state = { status: "queued" };
     for (let attempt = 0; attempt < 180; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 2000));
       const statusResponse = await fetch(job.status_url);
+      if (!statusResponse.ok) { const detail = await statusResponse.text(); throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`); }
       state = await statusResponse.json();
       if (state.status === "failed") throw new Error(state.error || "Render failed.");
       if (state.status === "complete") break;
