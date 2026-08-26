@@ -53,7 +53,19 @@ def preview():
         for scene in payload["scenes"]:
             if scene.get("scene_type") != "video":
                 continue
-            candidates = search_videos(os.getenv("PEXELS_API_KEY", ""), scene.get("text", ""))
+            base_query = scene.get("text", "").strip()
+            queries = [base_query]
+            if payload.get("expand"):
+                queries.extend(f"{base_query} {suffix}" for suffix in ("pink", "woman", "aesthetic", "baddie"))
+            candidates = []
+            seen_ids = set()
+            for query in queries:
+                for video in search_videos(os.getenv("PEXELS_API_KEY", ""), query):
+                    video_id = video.get("id")
+                    if video_id in seen_ids:
+                        continue
+                    seen_ids.add(video_id)
+                    candidates.append(video)
             compact = []
             for video in candidates:
                 files = video.get("video_files", [])
