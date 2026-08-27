@@ -1,3 +1,6 @@
+const API_BASE = (document.querySelector("meta[name=\"api-base\"]")?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
+function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
+function backendUnavailableMessage() { return "Instant preview is ready. Add ?api=https://your-backend-url to this Pages URL for Pexels footage and MP4 export."; }
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
@@ -11,10 +14,8 @@ const count = document.querySelector("#scene-count");
 const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
-document.querySelector("#preview-footage")?.remove();
-document.querySelector("#more-footage")?.remove();
 const renderHint = document.querySelector("#render-status");
-if (renderHint) renderHint.textContent = "Load your script to automatically find and load footage, then review the scenes.";
+if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
@@ -29,6 +30,17 @@ function renderScenes(script) {
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
+function renderBrowserPreview(script) {
+  const preview = document.querySelector("#browser-preview");
+  if (!preview) return;
+  preview.innerHTML = script.scenes.map((scene, index) => {
+    const videoUrl = scene.selected_video?.preview_url || "";
+    const media = scene.scene_type === "video" && videoUrl
+      ? `<video src="${escapeHtml(videoUrl)}" muted playsinline controls preload="metadata"></video>`
+      : `<div class="preview-placeholder ${scene.scene_type === "text" ? "preview-text" : "preview-video"}"><span>${scene.scene_type === "text" ? "TEXT SCENE" : "VIDEO SCENE"}</span><strong>${escapeHtml(scene.text)}</strong></div>`;
+    return `<article class="browser-preview-card"><div class="browser-preview-media">${media}</div><div class="browser-preview-label"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds}s · ${scene.scene_type === "video" ? (videoUrl ? "footage loaded" : "footage pending") : "full-screen text"}</small></div></article>`;
+  }).join("");
+}
 function plainTextToScript(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) throw new Error("Add at least one non-empty line to your script.");
@@ -36,7 +48,8 @@ function plainTextToScript(text) {
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
 async function loadFootagePreviews(script, expand = false) {
-  const response = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
+  if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
+  const response = await fetch(apiUrl("/api/preview"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
   if (!response.ok) throw new Error(await response.text() || "Could not load Pexels previews.");
   const data = await response.json();
   data.scenes.forEach((preview) => {
@@ -50,7 +63,7 @@ async function loadFootagePreviews(script, expand = false) {
       const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview Pexels candidate ${index + 1}`; button.appendChild(video);
       const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
       button.addEventListener("click", () => {
-        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
+        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓"; renderBrowserPreview(script);
       });
       box.appendChild(button);
     });
@@ -66,15 +79,17 @@ async function loadScript() {
     currentScript = script;
     error.textContent = "";
     renderScenes(script);
-    loadButton.innerHTML = "Finding footage…";
-    await loadFootagePreviews(script, true);
+    renderBrowserPreview(script);
     loadButton.innerHTML = "Script loaded ✓";
     window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
+    loadFootagePreviews(script, true).catch((err) => { error.textContent = err instanceof Error ? err.message : backendUnavailableMessage(); });
   } catch (err) {
     error.textContent = err instanceof Error ? err.message : "Could not load that script.";
   }
 }
 loadButton.addEventListener("click", loadScript);
+document.querySelector("#preview-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, false).catch((err) => { error.textContent = err.message; }));
+document.querySelector("#more-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, true).catch((err) => { error.textContent = err.message; }));
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
@@ -96,14 +111,15 @@ renderButton.addEventListener("click", async () => {
   status.textContent = "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…";
   error.textContent = "";
   try {
-    const response = await fetch("/api/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
+    if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
+    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
     if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
     if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
     let state = { status: "queued" };
     for (let attempt = 0; attempt < 180; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      const statusResponse = await fetch(job.status_url);
+      const statusResponse = await fetch(apiUrl(job.status_url));
       if (!statusResponse.ok) { const detail = await statusResponse.text(); throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`); }
       state = await statusResponse.json();
       if (state.status === "failed") throw new Error(state.error || "Render failed.");
@@ -111,7 +127,7 @@ renderButton.addEventListener("click", async () => {
       status.textContent = `Rendering video… ${Math.round((attempt + 1) / 180 * 100)}%`;
     }
     if (state.status !== "complete") throw new Error("Render is taking longer than expected. Check the service logs.");
-    const downloadResponse = await fetch(job.download_url);
+    const downloadResponse = await fetch(apiUrl(job.download_url));
     if (!downloadResponse.ok) throw new Error(await downloadResponse.text() || "The video download failed.");
     const blob = await downloadResponse.blob();
     const url = URL.createObjectURL(blob);
@@ -123,3 +139,4 @@ renderButton.addEventListener("click", async () => {
   } finally { renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }
 });
 renderScenes(currentScript);
+renderBrowserPreview(currentScript);
