@@ -1,5 +1,6 @@
 """Straightforward ffmpeg wrappers for scenes and final concatenation."""
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,7 +20,7 @@ def ensure_ffmpeg() -> None:
 def run_ffmpeg(args: list[str]) -> None:
     try:
         completed = subprocess.run(
-            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *args],
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-threads", os.getenv("FFMPEG_THREADS", "1"), *args],
             check=False,
             capture_output=True,
             text=True,
@@ -35,7 +36,7 @@ def _font_args() -> list[str]:
 
 
 def _escape_drawtext(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
+    return text.replace("\", "\\").replace(":", "\:").replace("'", "\'").replace("%", "\%")
 
 
 def caption_filter(text: str) -> str:
