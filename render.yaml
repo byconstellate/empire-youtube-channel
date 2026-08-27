@@ -20,3 +20,5 @@ services:
         value: "24"
       - key: MAX_SOURCE_WIDTH
         value: "720"
+      - key: VIDEO_PAN_REGION
+        value: top_50
