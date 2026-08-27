@@ -12,3 +12,11 @@ services:
         value: "1"
       - key: GOOGLE_TTS_LANGUAGE
         value: en
+      - key: VIDEO_WIDTH
+        value: "1280"
+      - key: VIDEO_HEIGHT
+        value: "720"
+      - key: VIDEO_FPS
+        value: "24"
+      - key: MAX_SOURCE_WIDTH
+        value: "720"
