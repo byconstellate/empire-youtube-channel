@@ -93,7 +93,7 @@ async function loadScript() {
     renderScenes(script);
     renderBrowserPreview(script);
     loadButton.innerHTML = "Script loaded ✓";
-    window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
+    window.setTimeout(() => { loadButton.innerHTML = "Load script + find more <span>→</span>"; }, 1800);
     loadFootagePreviews(script, true).catch((err) => { error.textContent = err instanceof Error ? err.message : backendUnavailableMessage(); });
   } catch (err) {
     error.textContent = err instanceof Error ? err.message : "Could not load that script.";
@@ -101,8 +101,6 @@ async function loadScript() {
 }
 loadButton.addEventListener("click", loadScript);
 document.querySelector("#script-file")?.addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; input.value = await file.text(); loadScript(); });
-document.querySelector("#preview-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, false).catch((err) => { error.textContent = err.message; }));
-document.querySelector("#more-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, true).catch((err) => { error.textContent = err.message; }));
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
