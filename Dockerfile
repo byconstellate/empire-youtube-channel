@@ -1,7 +1,12 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    VIDEO_WIDTH=1280 \
+    VIDEO_HEIGHT=720 \
+    VIDEO_FPS=24 \
+    MAX_SOURCE_WIDTH=720 \
+    FFMPEG_THREADS=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
