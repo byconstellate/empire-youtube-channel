@@ -20,7 +20,7 @@ const renderVideo = document.querySelector("#render-video");
 const downloadButton = document.querySelector("#download-button");
 let renderedVideoUrl = "";
 renderButton.innerHTML = "Export MP4 <span>→</span>";
-if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
+if (renderHint) renderHint.textContent = "Review your scenes and footage, then render the finished video.";
 const languageSelect = document.querySelector("#language");
 if (languageSelect && !document.querySelector("#pan-region")) {
   const panLabel = document.createElement("label"); panLabel.htmlFor = "pan-region"; panLabel.textContent = "Pan crop";
@@ -45,28 +45,6 @@ function renderScenes(script) {
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
-function ensureBrowserPreviewPanel() {
-  let preview = document.querySelector("#browser-preview");
-  if (preview) return preview;
-  const renderBar = document.querySelector(".render-bar");
-  if (!renderBar || !renderBar.parentElement) return null;
-  const panel = document.createElement("section");
-  panel.className = "panel instant-preview-panel";
-  panel.innerHTML = `<div class="panel-heading"><div><span class="step">04</span><h2>Instant browser preview</h2></div><span class="muted">No voice or FFmpeg</span></div><div id="browser-preview" class="browser-preview" aria-live="polite"></div>`;
-  renderBar.parentElement.insertBefore(panel, renderBar);
-  return panel.querySelector("#browser-preview");
-}
-function renderBrowserPreview(script) {
-  const preview = ensureBrowserPreviewPanel();
-  if (!preview) return;
-  preview.innerHTML = script.scenes.map((scene, index) => {
-    const videoUrl = scene.selected_video?.preview_url || "";
-    const media = scene.scene_type === "video" && videoUrl
-      ? `<video src="${escapeHtml(videoUrl)}" muted playsinline controls preload="metadata"></video>`
-      : `<div class="preview-placeholder ${scene.scene_type === "text" ? "preview-text" : "preview-video"}"><span>${scene.scene_type === "text" ? "TEXT SCENE" : "VIDEO SCENE"}</span><strong>${escapeHtml(scene.text)}</strong></div>`;
-    return `<article class="browser-preview-card"><div class="browser-preview-media">${media}</div><div class="browser-preview-label"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds}s · ${scene.scene_type === "video" ? (videoUrl ? "footage loaded" : "footage pending") : "full-screen text"}</small></div></article>`;
-  }).join("");
-}
 function plainTextToScript(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) throw new Error("Add at least one non-empty line to your script.");
@@ -89,7 +67,7 @@ async function loadFootagePreviews(script, expand = false) {
       const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview Pexels candidate ${index + 1}`; button.appendChild(video);
       const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
       button.addEventListener("click", () => {
-        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓"; renderBrowserPreview(script);
+        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
       });
       box.appendChild(button);
     });
@@ -105,7 +83,6 @@ async function loadScript() {
     currentScript = script;
     error.textContent = "";
     renderScenes(script);
-    renderBrowserPreview(script);
     loadButton.innerHTML = "Script loaded ✓";
     window.setTimeout(() => { loadButton.innerHTML = "Load script + find more <span>→</span>"; }, 1800);
     loadFootagePreviews(script, true).catch((err) => { error.textContent = err instanceof Error ? err.message : backendUnavailableMessage(); });
@@ -184,4 +161,3 @@ renderButton.addEventListener("click", async () => {
   } finally { renderButton.disabled = false; renderButton.innerHTML = "Export MP4 <span>→</span>"; }
 });
 renderScenes(currentScript);
-renderBrowserPreview(currentScript);
