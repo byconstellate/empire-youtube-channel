@@ -19,6 +19,7 @@ GOOGLE_TTS_LANGUAGE = os.getenv("GOOGLE_TTS_LANGUAGE", "en")
 VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1920"))
 VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "1080"))
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "30"))
+VIDEO_PAN_DIRECTION = os.getenv("VIDEO_PAN_DIRECTION", "top_to_bottom").lower()
 FONT_FILE = os.getenv("FONT_FILE", "")
 
 
