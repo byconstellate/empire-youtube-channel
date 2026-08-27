@@ -11,6 +11,10 @@ const count = document.querySelector("#scene-count");
 const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
+document.querySelector("#preview-footage")?.remove();
+document.querySelector("#more-footage")?.remove();
+const renderHint = document.querySelector("#render-status");
+if (renderHint) renderHint.textContent = "Load your script to automatically find and load footage, then review the scenes.";
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
