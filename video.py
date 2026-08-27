@@ -50,7 +50,7 @@ def _escape_drawtext(text: str) -> str:
         .replace(":", "\\:")
         .replace("'", "\\'")
         .replace("%", "\\%")
-        .replace("\n", "\\n")
+        .replace("\n", "\\\\n")
     )
 
 
