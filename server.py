@@ -17,6 +17,23 @@ app = Flask(__name__, static_folder="frontend", static_url_path="")
 jobs = {}
 jobs_lock = threading.Lock()
 
+
+@app.after_request
+def add_cors_headers(response):
+  origin = request.headers.get("Origin")
+  allowed_origin = os.getenv("FRONTEND_ORIGIN", "*")
+  if allowed_origin == "*" or origin == allowed_origin:
+      response.headers["Access-Control-Allow-Origin"] = origin or "*"
+      response.headers["Vary"] = "Origin"
+      response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+      response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+  return response
+
+
+@app.route("/api/<path:api_path>", methods=["OPTIONS"])
+def api_options(api_path: str):
+  return ("", 204)
+
 @app.get("/")
 def index():
   return app.send_static_file("index.html")
