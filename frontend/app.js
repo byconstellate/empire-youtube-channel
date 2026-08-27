@@ -1,4 +1,17 @@
-(function mountEmpireEditor() {\n  if (document.getElementById('script-editor')) return;\n  document.title = 'Empire Scene Editor';\n  document.body.innerHTML = [\n    '<main class="app-shell">',\n    '<header class="topbar"><a class="brand" href="/"><span class="brand-mark">E</span><span class="brand-wordmark">EMPIRE<small>SCENE EDITOR</small></span></a><div class="project-name"><span class="status-dot"></span><span>One idea, three minutes</span><span class="divider"></span><span class="muted">Draft</span></div><div class="top-actions"><span id="save-state" class="save-state"><span class="save-dot"></span> SAVED LOCALLY</span><button id="preview-toggle" class="button button-light" type="button">▶ Preview</button><button id="export-button" class="button button-coral" type="button">↗ Export</button><span class="avatar">AL</span></div></header>',\n    '<div class="workspace">',\n    '<aside class="script-column"><div class="column-heading"><div><span class="heading-icon">T</span><span class="heading-label">SCRIPT</span><span id="scene-count" class="count-pill">4 SCENES</span></div><span class="plain-label">Plain text ⌄</span></div><div class="script-card"><div class="selection-hint"><span class="cursor-icon">↗</span><span>Highlight a thought to make it a new scene. Your words stay yours.</span></div><div id="script-editor" class="script-editor" contenteditable="true" role="textbox" aria-label="Script text"></div><div class="selection-bar"><button id="make-scene-button" class="button button-coral button-small" type="button" disabled>Make new scene ↗</button><button id="add-paragraph" class="text-button" type="button">+ Add thought</button></div></div><div class="script-footer"><span id="word-count">0 words</span><span id="time-count">Approx. 00:20</span></div></aside>',\n    '<section class="canvas-column"><div class="canvas-toolbar"><div><span class="mono-label">CANVAS / 9:16</span><span id="canvas-time" class="mono-label muted">00:01 / 00:20</span></div><button class="round-button" id="more-button" type="button">•••</button></div><div class="canvas-stage"><div id="video-preview" class="video-preview"><div class="preview-topline"><span>EMPIRE / 001</span><span id="preview-category">VIDEO / MORNING</span></div><div id="preview-content" class="preview-content"><h2 id="preview-text"></h2><span class="preview-caption">KEEP GOING</span></div><div class="preview-bottomline"><span>A NOTE ON MAKING</span><span id="preview-number">01</span></div><button id="preview-play" class="preview-play" type="button">▶</button></div><div class="canvas-meta"><span><i class="meta-square"></i>1080 × 1920</span><span><i class="meta-wave"></i>Voiceover off</span></div></div><div class="scene-strip-heading"><span>SCENE STRIP <b id="strip-count">4 / 8</b></span><span class="muted">Drag to reorder · <span id="total-time">00:20 total</span></span></div><div id="scene-strip" class="scene-strip"></div></section>',\n    '<aside class="inspector-column"><div id="inspector" class="inspector-content"></div><div id="save-toast" class="save-toast">✓ Scene changes saved</div></aside>',\n    '</div><div id="toast" class="toast" role="status" aria-live="polite"></div></main>'\n  ].join('');\n})();\nconst initialParagraphs = [
+(function mountEmpireEditor() {
+  if (document.getElementById('script-editor')) return;
+  document.title = 'Empire Scene Editor';
+  document.body.innerHTML = [
+    '<main class="app-shell">',
+    '<header class="topbar"><a class="brand" href="/"><span class="brand-mark">E</span><span class="brand-wordmark">EMPIRE<small>SCENE EDITOR</small></span></a><div class="project-name"><span class="status-dot"></span><span>One idea, three minutes</span><span class="divider"></span><span class="muted">Draft</span></div><div class="top-actions"><span id="save-state" class="save-state"><span class="save-dot"></span> SAVED LOCALLY</span><button id="preview-toggle" class="button button-light" type="button">▶ Preview</button><button id="export-button" class="button button-coral" type="button">↗ Export</button><span class="avatar">AL</span></div></header>',
+    '<div class="workspace">',
+    '<aside class="script-column"><div class="column-heading"><div><span class="heading-icon">T</span><span class="heading-label">SCRIPT</span><span id="scene-count" class="count-pill">4 SCENES</span></div><span class="plain-label">Plain text ⌄</span></div><div class="script-card"><div class="selection-hint"><span class="cursor-icon">↗</span><span>Highlight a thought to make it a new scene. Your words stay yours.</span></div><div id="script-editor" class="script-editor" contenteditable="true" role="textbox" aria-label="Script text"></div><div class="selection-bar"><button id="make-scene-button" class="button button-coral button-small" type="button" disabled>Make new scene ↗</button><button id="add-paragraph" class="text-button" type="button">+ Add thought</button></div></div><div class="script-footer"><span id="word-count">0 words</span><span id="time-count">Approx. 00:20</span></div></aside>',
+    '<section class="canvas-column"><div class="canvas-toolbar"><div><span class="mono-label">CANVAS / 9:16</span><span id="canvas-time" class="mono-label muted">00:01 / 00:20</span></div><button class="round-button" id="more-button" type="button">•••</button></div><div class="canvas-stage"><div id="video-preview" class="video-preview"><div class="preview-topline"><span>EMPIRE / 001</span><span id="preview-category">VIDEO / MORNING</span></div><div id="preview-content" class="preview-content"><h2 id="preview-text"></h2><span class="preview-caption">KEEP GOING</span></div><div class="preview-bottomline"><span>A NOTE ON MAKING</span><span id="preview-number">01</span></div><button id="preview-play" class="preview-play" type="button">▶</button></div><div class="canvas-meta"><span><i class="meta-square"></i>1080 × 1920</span><span><i class="meta-wave"></i>Voiceover off</span></div></div><div class="scene-strip-heading"><span>SCENE STRIP <b id="strip-count">4 / 8</b></span><span class="muted">Drag to reorder · <span id="total-time">00:20 total</span></span></div><div id="scene-strip" class="scene-strip"></div></section>',
+    '<aside class="inspector-column"><div id="inspector" class="inspector-content"></div><div id="save-toast" class="save-toast">✓ Scene changes saved</div></aside>',
+    '</div><div id="toast" class="toast" role="status" aria-live="polite"></div></main>'
+  ].join('');
+})();
+const initialParagraphs = [
     "The best ideas are usually the ones we almost talk ourselves out of.",
     "We wait for confidence to arrive before we make the thing.",
     "But confidence is not a prerequisite. It is the receipt.",
@@ -50,13 +63,10 @@
     }
     function activeScene() { return scenes.find(function (scene) { return scene.id === activeSceneId; }) || scenes[0]; }
     function paragraphsToHtml(text) {
-    return text.split(/
-{2,}/).map(function (paragraph) { return "<p>" + escapeHtml(paragraph.trim()) + "</p>"; }).filter(Boolean).join("");
+    return text.split(/\n{2,}/).map(function (paragraph) { return "<p>" + escapeHtml(paragraph.trim()) + "</p>"; }).filter(Boolean).join("");
     }
     function syncEditorText() {
-    const text = Array.from(scriptEditor.querySelectorAll("p")).map(function (paragraph) { return paragraph.innerText.trim(); }).filter(Boolean).join("
-
-");
+    const text = Array.from(scriptEditor.querySelectorAll("p")).map(function (paragraph) { return paragraph.innerText.trim(); }).filter(Boolean).join("\n\n");
     if (text) localStorage.setItem("empire-script-text", text);
     }
     function notify(message) {
@@ -67,7 +77,7 @@
     }
     function totalDuration() { return scenes.reduce(function (sum, scene) { return sum + Number(scene.duration || 5); }, 0); }
     function updateCounts() {
-    const words = scenes.map(function (scene) { return scene.text; }).join(" ").trim().split(/s+/).filter(Boolean).length;
+    const words = scenes.map(function (scene) { return scene.text; }).join(" ").trim().split(/\s+/).filter(Boolean).length;
     const total = totalDuration();
     document.querySelector("#scene-count").textContent = scenes.length + " SCENES";
     document.querySelector("#strip-count").textContent = scenes.length + " / 8";
@@ -329,8 +339,6 @@
     if (event.target.id === "duration") { scene.duration = Number(event.target.value); document.querySelector("#duration-value").textContent = scene.duration + " sec"; updateCounts(); saveState(); }
     if (event.target.id === "video-query") scene.searchQuery = event.target.value;
     });
-    scriptEditor.innerHTML = paragraphsToHtml(initialParagraphs.join("
-
-"));
+    scriptEditor.innerHTML = paragraphsToHtml(initialParagraphs.join("\n\n"));
     renderAll();
     
