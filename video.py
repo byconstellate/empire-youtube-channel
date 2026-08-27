@@ -38,7 +38,7 @@ def _font_args() -> list[str]:
 
 def wrap_caption(text: str) -> str:
     clean = " ".join(text.split())
-    max_chars = max(20, VIDEO_WIDTH // 40)
+    max_chars = max(20, VIDEO_WIDTH // 52)
     return "\\n".join(
         textwrap.wrap(clean, width=max_chars, break_long_words=True, break_on_hyphens=False)
     )
@@ -54,7 +54,7 @@ def caption_filter(text: str) -> str:
     wrapped = _escape_drawtext(wrap_caption(text))
     return (
         f"drawtext={prefix}text='{wrapped}':"
-        "fontcolor=white:fontsize=52:borderw=4:bordercolor=black:"
+        "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
         "x=(w-text_w)/2:y=h*0.72:line_spacing=12"
     )
 
