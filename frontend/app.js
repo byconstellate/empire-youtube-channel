@@ -100,6 +100,7 @@ async function loadScript() {
   }
 }
 loadButton.addEventListener("click", loadScript);
+document.querySelector("#script-file")?.addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; input.value = await file.text(); loadScript(); });
 document.querySelector("#preview-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, false).catch((err) => { error.textContent = err.message; }));
 document.querySelector("#more-footage")?.addEventListener("click", () => loadFootagePreviews(currentScript, true).catch((err) => { error.textContent = err.message; }));
 scenes.addEventListener("click", (event) => {
@@ -148,7 +149,7 @@ renderButton.addEventListener("click", async () => {
     title.textContent = "Video created"; status.textContent = "Your horizontal 1920 × 1080 MP4 has downloaded.";
   } catch (err) {
     title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
-  } finally { renderButton.disabled = false; renderButton.innerHTML = "Start render <span>→</span>"; }
+  } finally { renderButton.disabled = false; renderButton.innerHTML = "Export MP4 <span>→</span>"; }
 });
 renderScenes(currentScript);
 renderBrowserPreview(currentScript);
