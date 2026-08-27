@@ -3,9 +3,10 @@
 import os
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
-from config import FONT_FILE, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_PAN_DIRECTION, VIDEO_WIDTH
+from config import FONT_FILE, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_PAN_DIRECTION, VIDEO_PAN_REGION, VIDEO_WIDTH
 
 
 class FFmpegError(RuntimeError):
@@ -35,30 +36,47 @@ def _font_args() -> list[str]:
     return [f"fontfile={FONT_FILE}"] if FONT_FILE else []
 
 
+def wrap_caption(text: str) -> str:
+    clean = " ".join(text.split())
+    max_chars = max(20, VIDEO_WIDTH // 40)
+    return "\\n".join(
+        textwrap.wrap(clean, width=max_chars, break_long_words=True, break_on_hyphens=False)
+    )
+
+
 def _escape_drawtext(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
+    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%").replace("\\n", "\\\\n")
 
 
 def caption_filter(text: str) -> str:
     font = ":".join(_font_args())
     prefix = f"{font}:" if font else ""
+    wrapped = _escape_drawtext(wrap_caption(text))
     return (
-        f"drawtext={prefix}text='{_escape_drawtext(text)}':"
-        "fontcolor=white:fontsize=64:borderw=4:bordercolor=black:"
+        f"drawtext={prefix}text='{wrapped}':"
+        "fontcolor=white:fontsize=52:borderw=4:bordercolor=black:"
         "x=(w-text_w)/2:y=h*0.72:line_spacing=12"
     )
 
 
-def footage_filter(text: str, duration: float, pan_direction: str) -> str:
-    """Scale footage to fill the canvas and pan through tall portrait footage."""
+def footage_filter(
+    text: str,
+    duration: float,
+    pan_direction: str,
+    pan_region: str = VIDEO_PAN_REGION,
+) -> str:
+    """Scale footage and pan within the selected top or bottom half."""
     if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
         raise FFmpegError(
             'VIDEO_PAN_DIRECTION must be "top_to_bottom" or "bottom_to_top".'
         )
-    if pan_direction == "top_to_bottom":
-        y_position = f"(ih-oh)*t/{duration}"
+    if pan_region not in {"top_50", "bottom_50"}:
+        raise FFmpegError('VIDEO_PAN_REGION must be "top_50" or "bottom_50".')
+    progress = f"t/{duration}" if pan_direction == "top_to_bottom" else f"(1-t/{duration})"
+    if pan_region == "top_50":
+        y_position = f"(ih-oh)*0.5*({progress})"
     else:
-        y_position = f"(ih-oh)*(1-t/{duration})"
+        y_position = f"(ih-oh)*(0.5+0.5*({progress}))"
     return (
         f"scale={VIDEO_WIDTH}:-2:force_original_aspect_ratio=increase,"
         f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:0:{y_position},"
@@ -73,9 +91,10 @@ def create_video_scene(
     duration: float,
     output: Path,
     pan_direction: str = VIDEO_PAN_DIRECTION,
+    pan_region: str = VIDEO_PAN_REGION,
 ) -> None:
     video_filter = (
-        footage_filter(text, duration, pan_direction)
+        footage_filter(text, duration, pan_direction, pan_region)
     )
     run_ffmpeg(
         [
