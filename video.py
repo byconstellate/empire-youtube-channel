@@ -39,13 +39,19 @@ def _font_args() -> list[str]:
 def wrap_caption(text: str) -> str:
     clean = " ".join(text.split())
     max_chars = max(20, VIDEO_WIDTH // 52)
-    return "\\n".join(
+    return "\n".join(
         textwrap.wrap(clean, width=max_chars, break_long_words=True, break_on_hyphens=False)
     )
 
 
 def _escape_drawtext(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%").replace("\\n", "\\\\n")
+    return (
+        text.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace("%", "\\%")
+        .replace("\n", "\\n")
+    )
 
 
 def caption_filter(text: str) -> str:
