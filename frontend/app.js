@@ -15,6 +15,7 @@ const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
 const renderHint = document.querySelector("#render-status");
+renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
@@ -30,8 +31,19 @@ function renderScenes(script) {
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
+function ensureBrowserPreviewPanel() {
+  let preview = document.querySelector("#browser-preview");
+  if (preview) return preview;
+  const renderBar = document.querySelector(".render-bar");
+  if (!renderBar || !renderBar.parentElement) return null;
+  const panel = document.createElement("section");
+  panel.className = "panel instant-preview-panel";
+  panel.innerHTML = `<div class="panel-heading"><div><span class="step">04</span><h2>Instant browser preview</h2></div><span class="muted">No voice or FFmpeg</span></div><div id="browser-preview" class="browser-preview" aria-live="polite"></div>`;
+  renderBar.parentElement.insertBefore(panel, renderBar);
+  return panel.querySelector("#browser-preview");
+}
 function renderBrowserPreview(script) {
-  const preview = document.querySelector("#browser-preview");
+  const preview = ensureBrowserPreviewPanel();
   if (!preview) return;
   preview.innerHTML = script.scenes.map((scene, index) => {
     const videoUrl = scene.selected_video?.preview_url || "";
