@@ -15,11 +15,7 @@ const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
 const renderHint = document.querySelector("#render-status");
-const renderPreview = document.querySelector("#render-preview");
-const renderVideo = document.querySelector("#render-video");
-const downloadButton = document.querySelector("#download-button");
-let renderedVideoUrl = "";
-renderButton.innerHTML = "Start render <span>→</span>";
+renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
 const languageSelect = document.querySelector("#language");
 if (languageSelect && !document.querySelector("#pan-region")) {
@@ -104,8 +100,6 @@ async function loadScript() {
     if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");
     currentScript = script;
     error.textContent = "";
-  if (renderPreview) renderPreview.hidden = true;
-  if (downloadButton) downloadButton.disabled = true;
     renderScenes(script);
     renderBrowserPreview(script);
     loadButton.innerHTML = "Script loaded ✓";
@@ -157,20 +151,10 @@ renderButton.addEventListener("click", async () => {
     const downloadResponse = await fetch(apiUrl(job.download_url));
     if (!downloadResponse.ok) throw new Error(await downloadResponse.text() || "The video download failed.");
     const blob = await downloadResponse.blob();
-    if (renderedVideoUrl) URL.revokeObjectURL(renderedVideoUrl);
-    renderedVideoUrl = URL.createObjectURL(blob);
-    renderVideo.src = renderedVideoUrl;
-    renderVideo.load();
-    renderPreview.hidden = false;
-    downloadButton.disabled = false;
-    downloadButton.onclick = () => {
-      const link = document.createElement("a");
-      link.href = renderedVideoUrl;
-      link.download = currentScript.project_id + "-landscape.mp4";
-      link.click();
-    };
-    title.textContent = "Preview ready";
-    status.textContent = "Review the video above. Download it when you're happy.";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = `${currentScript.project_id}-landscape.mp4`; link.click();
+    URL.revokeObjectURL(url);
+    title.textContent = "Video created"; status.textContent = "Your horizontal 1280 × 720 MP4 has downloaded.";
   } catch (err) {
     title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
   } finally { renderButton.disabled = false; renderButton.innerHTML = "Export MP4 <span>→</span>"; }
