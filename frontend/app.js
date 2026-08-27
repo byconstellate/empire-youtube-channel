@@ -121,7 +121,7 @@ renderButton.addEventListener("click", async () => {
   const status = document.querySelector("#render-status");
   renderButton.disabled = true; renderButton.textContent = "Rendering…";
   title.textContent = "Creating your video";
-  status.textContent = "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…";
+  status.textContent = "Generating voice, fetching footage, and encoding a 1280 × 720 MP4…";
   error.textContent = "";
   try {
     if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
@@ -146,7 +146,7 @@ renderButton.addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = `${currentScript.project_id}-landscape.mp4`; link.click();
     URL.revokeObjectURL(url);
-    title.textContent = "Video created"; status.textContent = "Your horizontal 1920 × 1080 MP4 has downloaded.";
+    title.textContent = "Video created"; status.textContent = "Your horizontal 1280 × 720 MP4 has downloaded.";
   } catch (err) {
     title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
   } finally { renderButton.disabled = false; renderButton.innerHTML = "Export MP4 <span>→</span>"; }
