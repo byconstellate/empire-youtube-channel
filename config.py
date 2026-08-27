@@ -20,6 +20,7 @@ VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1280"))
 VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "720"))
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "24"))
 VIDEO_PAN_DIRECTION = os.getenv("VIDEO_PAN_DIRECTION", "top_to_bottom").lower()
+VIDEO_PAN_REGION = os.getenv("VIDEO_PAN_REGION", "top_50").lower()
 FONT_FILE = os.getenv("FONT_FILE", "")
 
 
