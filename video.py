@@ -36,7 +36,7 @@ def _font_args() -> list[str]:
 
 
 def _escape_drawtext(text: str) -> str:
-    return text.replace("\", "\\").replace(":", "\:").replace("'", "\'").replace("%", "\%")
+    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
 
 
 def caption_filter(text: str) -> str:
