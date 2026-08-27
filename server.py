@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_file
 
-from config import GOOGLE_TTS_LANGUAGE
+from config import GOOGLE_TTS_LANGUAGE, VIDEO_PAN_REGION
 from pexels import search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
@@ -56,8 +56,11 @@ def run_render(job_id: str, payload: dict) -> None:
   try:
       render_payload = dict(payload)
       language = render_payload.pop("language", GOOGLE_TTS_LANGUAGE)
+      pan_region = render_payload.pop("pan_region", VIDEO_PAN_REGION)
       if language:
           os.environ["GOOGLE_TTS_LANGUAGE"] = str(language)
+      if pan_region:
+          os.environ["VIDEO_PAN_REGION"] = str(pan_region)
       with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as script_file:
           json.dump(render_payload, script_file)
           script_path = Path(script_file.name)
