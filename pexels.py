@@ -56,13 +56,19 @@ def best_download_url(video: dict[str, Any]) -> str:
         raise PexelsError("The approved Pexels video has no downloadable files.")
     portrait = [item for item in files if item.get("width", 0) <= item.get("height", 0)]
     choices = portrait or files
-    return sorted(choices, key=lambda item: item.get("width", 0), reverse=True)[0]["link"]
+    max_width = int(os.getenv("MAX_SOURCE_WIDTH", "1080"))
+    bounded = [item for item in choices if 0 < item.get("width", 0) <= max_width]
+    selected = max(bounded, key=lambda item: item.get("width", 0)) if bounded else min(choices, key=lambda item: item.get("width", 0))
+    return selected["link"]
 
 
 def download_video(video: dict[str, Any], output_path: Path) -> None:
     try:
-        response = requests.get(best_download_url(video), timeout=120)
-        response.raise_for_status()
-        output_path.write_bytes(response.content)
+        with requests.get(best_download_url(video), timeout=120, stream=True) as response:
+            response.raise_for_status()
+            with output_path.open("wb") as output_file:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        output_file.write(chunk)
     except (requests.RequestException, OSError, KeyError) as exc:
         raise PexelsError(f"Video download failed: {exc}") from exc
