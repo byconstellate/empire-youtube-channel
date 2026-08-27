@@ -11,8 +11,6 @@ const count = document.querySelector("#scene-count");
 const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
 const loadButton = document.querySelector("#load-script");
-const previewButton = document.querySelector("#preview-footage");
-const moreButton = document.querySelector("#more-footage");
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
@@ -65,7 +63,7 @@ async function loadScript() {
     error.textContent = "";
     renderScenes(script);
     loadButton.innerHTML = "Finding footage…";
-    await loadFootagePreviews(script);
+    await loadFootagePreviews(script, true);
     loadButton.innerHTML = "Script loaded ✓";
     window.setTimeout(() => { loadButton.innerHTML = "Load script <span>→</span>"; }, 1800);
   } catch (err) {
@@ -73,36 +71,6 @@ async function loadScript() {
   }
 }
 loadButton.addEventListener("click", loadScript);
-async function findFootagePreviews() {
-  previewButton.disabled = true;
-  previewButton.textContent = "Finding footage…";
-  error.textContent = "";
-  try {
-    renderScenes(currentScript);
-    await loadFootagePreviews(currentScript);
-    previewButton.innerHTML = "Previews loaded ✓";
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load footage previews.";
-  } finally {
-    previewButton.disabled = false;
-    window.setTimeout(() => { previewButton.innerHTML = "Find footage previews <span>↗</span>"; }, 2200);
-  }
-}
-previewButton.addEventListener("click", findFootagePreviews);
-moreButton.addEventListener("click", async () => {
-  moreButton.disabled = true;
-  moreButton.textContent = "Searching variations…";
-  error.textContent = "";
-  try {
-    await loadFootagePreviews(currentScript, true);
-    moreButton.innerHTML = "More variations loaded ✓";
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load more footage.";
-  } finally {
-    moreButton.disabled = false;
-    window.setTimeout(() => { moreButton.innerHTML = "Find more variations <span>+</span>"; }, 2200);
-  }
-});
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
