@@ -17,6 +17,9 @@ const loadButton = document.querySelector("#load-script");
 const renderHint = document.querySelector("#render-status");
 renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
+document.querySelector("#preview-footage")?.remove();
+document.querySelector("#more-footage")?.remove();
+loadButton.innerHTML = "Load script + find more <span>→</span>";
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
