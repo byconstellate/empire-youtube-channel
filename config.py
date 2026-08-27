@@ -16,9 +16,9 @@ PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 GOOGLE_TTS_LANGUAGE = os.getenv("GOOGLE_TTS_LANGUAGE", "en")
 
 # Landscape output for YouTube: 1920x1080 by default.
-VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1920"))
-VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "1080"))
-VIDEO_FPS = int(os.getenv("VIDEO_FPS", "30"))
+VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1280"))
+VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "720"))
+VIDEO_FPS = int(os.getenv("VIDEO_FPS", "24"))
 VIDEO_PAN_DIRECTION = os.getenv("VIDEO_PAN_DIRECTION", "top_to_bottom").lower()
 FONT_FILE = os.getenv("FONT_FILE", "")
 
