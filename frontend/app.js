@@ -17,6 +17,13 @@ const loadButton = document.querySelector("#load-script");
 const renderHint = document.querySelector("#render-status");
 renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
+const languageSelect = document.querySelector("#language");
+if (languageSelect && !document.querySelector("#pan-region")) {
+  const panLabel = document.createElement("label"); panLabel.htmlFor = "pan-region"; panLabel.textContent = "Pan crop";
+  const panSelect = document.createElement("select"); panSelect.id = "pan-region"; panSelect.innerHTML = '<option value="top_50">Top 50%</option><option value="bottom_50">Bottom 50%</option>';
+  languageSelect.insertAdjacentElement("afterend", panLabel); panLabel.insertAdjacentElement("afterend", panSelect);
+}
+
 document.querySelector("#preview-footage")?.remove();
 document.querySelector("#more-footage")?.remove();
 loadButton.innerHTML = "Load script + find more <span>→</span>";
@@ -126,7 +133,7 @@ renderButton.addEventListener("click", async () => {
   error.textContent = "";
   try {
     if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
-    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
+    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value, pan_region: document.querySelector("#pan-region")?.value || "top_50" }) });
     if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
     if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
