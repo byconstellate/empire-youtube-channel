@@ -73,7 +73,7 @@ function normalizeScript(script) {
 async function loadFootagePreviews(script, expand = false) {
   if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
   const response = await fetch(apiUrl("/api/preview"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
-  if (!response.ok) throw new Error(await response.text() || "Could not load Pexels previews.");
+  if (!response.ok) throw new Error(await response.text() || "Could not load media previews.");
   const data = await response.json();
   data.scenes.forEach((preview) => {
     const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
@@ -229,7 +229,7 @@ function renderLineBuilder() {
   scenes.innerHTML = "";
   const builder = document.createElement("section");
   builder.className = "line-builder";
-  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="text">Text</button><button type="button" data-line-type="gif">GIF</button><button type="button" data-line-type="video">Video</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Searching GIPHY for this line automatically…</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
+  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="text">Text</button><button type="button" data-line-type="gif">GIF</button><button type="button" data-line-type="video">Video</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Choose Text, GIF, or Video for this line.</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
   builder.querySelector(".line-builder-head span").textContent = "Line " + (activeLineIndex + 1) + " of " + currentScript.scenes.length;
   builder.querySelector(".line-builder-text").textContent = scene.text;
   builder.querySelector('[data-line-type="' + scene.scene_type + '"]').classList.add("active");
@@ -272,6 +272,7 @@ function renderLineBuilder() {
     return;
   }
   syncNextButton();
+  status.textContent = `Searching ${scene.scene_type === "gif" ? "GIPHY" : "Pexels"} for this line automatically…`;
   loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, true).then(() => {
     if (requestToken !== lineFetchToken) return;
     const footageLabel = builder.querySelector(".footage-previews small");
