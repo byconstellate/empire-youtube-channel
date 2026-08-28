@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 
 from config import GOOGLE_TTS_LANGUAGE, VIDEO_PAN_REGION
-from pexels import search_videos
+from giphy import search_gifs
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 jobs = {}
@@ -99,7 +99,7 @@ def preview():
           candidates = []
           seen_ids = set()
           for search_query in queries:
-              for video in search_videos(os.getenv("PEXELS_API_KEY", ""), search_query):
+              for video in search_gifs(os.getenv("GIPHY_API_KEY", ""), search_query):
                   video_id = video.get("id")
                   if video_id in seen_ids:
                       continue
@@ -146,3 +146,4 @@ def render_download(job_id: str):
 
 if __name__ == "__main__":
   app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False)
+
