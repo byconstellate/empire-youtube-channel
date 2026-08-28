@@ -11,8 +11,8 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 
 from config import GOOGLE_TTS_LANGUAGE, VIDEO_PAN_REGION
-from giphy import search_gifs
-from pexels import search_videos
+from giphy import GiphyError, search_gifs
+from pexels import PexelsError, search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 jobs = {}
@@ -113,8 +113,10 @@ def preview():
                   seen_ids.add(video_id)
                   candidates.append(compact_video(video, media_type))
           previews.append({"scene_id": str(scene.get("scene_id")), "candidates": candidates})
-  except Exception as exc:
+  except (GiphyError, PexelsError) as exc:
       return jsonify(error=str(exc)), 422
+  except Exception:
+      return jsonify(error="Media preview search failed. Try again."), 422
   return jsonify(scenes=previews)
 
 
