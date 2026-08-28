@@ -12,6 +12,7 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 PROJECTS_DIR = ROOT / "projects"
 
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 GOOGLE_TTS_LANGUAGE = os.getenv("GOOGLE_TTS_LANGUAGE", "en")
 
