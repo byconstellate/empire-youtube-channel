@@ -37,6 +37,17 @@ PEXELS_API_KEY=your_pexels_key
 
 The program reads environment variables. If your shell does not load `.env` automatically, export the values before running, or load them with your preferred dotenv workflow. Google voice generation does not need a TTS API key. Set `GOOGLE_TTS_LANGUAGE` to a supported language code such as `en`, `en-au`, `en-uk`, or `th`.
 
+## Web studio workflow
+
+The browser studio accepts a plain-text script with one line per scene. After loading it, work through the lines in order:
+
+1. Choose **Video** or **Text** for the current line.
+2. For video lines, review GIPHY results searched from that line, select a clip, and adjust pan area, pan motion, and text position.
+3. Set the duration, then choose **Next line**.
+4. Export the completed lineup to MP4.
+
+The web preview endpoint uses the server-side `GIPHY_API_KEY` environment variable. Add that secret to the deployment; never put it in the browser code. The command-line renderer remains compatible with the existing JSON format and can use Pexels as its fallback when no clip is selected.
+
 ## Script format
 
 Pass a JSON file with a `project_id` and ordered `scenes`. Video scenes require `search_query`; text scenes do not.
