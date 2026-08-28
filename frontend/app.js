@@ -30,12 +30,20 @@ input.value = JSON.stringify(sampleScript, null, 2);
 function renderScenes(script) {
   const total = script.scenes.reduce((sum, scene) => sum + Number(scene.duration_seconds), 0);
   count.textContent = `${script.scenes.length} scenes · ${total} sec`;
-  script.scenes.forEach((scene) => { if (scene.scene_type === "video") scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50"; });
+  script.scenes.forEach((scene) => {
+    if (scene.scene_type === "video") {
+      scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50";
+      scene.pan_direction = scene.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
+    }
+    scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
+  });
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
       <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
-        ${scene.scene_type === "video" ? `<label class="pan-control">Pan crop <select data-pan-region="${index}" aria-label="Pan crop for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top 50%</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom 50%</option></select></label><div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
+        ${scene.scene_type === "video" ? `<label class="scene-control">Pan area <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option></select></label><label class="scene-control">Pan motion <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}"><option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option><option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option></select></label>` : ""}
+        <label class="scene-control">Text position <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}"><option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option><option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option></select></label>
+        ${scene.scene_type === "video" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
@@ -87,9 +95,23 @@ async function loadScript() {
 loadButton.addEventListener("click", loadScript);
 document.querySelector("#script-file")?.addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; input.value = await file.text(); loadScript(); });
 scenes.addEventListener("change", (event) => {
-  const select = event.target.closest("select[data-pan-region]"); if (!select) return;
-  const scene = currentScript.scenes[Number(select.dataset.panRegion)];
-  if (scene) scene.pan_region = select.value;
+  const panRegion = event.target.closest("select[data-pan-region]");
+  if (panRegion) {
+    const scene = currentScript.scenes[Number(panRegion.dataset.panRegion)];
+    if (scene) scene.pan_region = panRegion.value;
+    return;
+  }
+  const panDirection = event.target.closest("select[data-pan-direction]");
+  if (panDirection) {
+    const scene = currentScript.scenes[Number(panDirection.dataset.panDirection)];
+    if (scene) scene.pan_direction = panDirection.value;
+    return;
+  }
+  const textPosition = event.target.closest("select[data-text-position]");
+  if (textPosition) {
+    const scene = currentScript.scenes[Number(textPosition.dataset.textPosition)];
+    if (scene) scene.text_position = textPosition.value;
+  }
 });
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
