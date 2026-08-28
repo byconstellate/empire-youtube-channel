@@ -8,7 +8,9 @@ from pathlib import Path
 from config import (
     GOOGLE_TTS_LANGUAGE,
     PEXELS_API_KEY,
+    VIDEO_PAN_DIRECTION,
     VIDEO_PAN_REGION,
+    VIDEO_TEXT_POSITION,
     project_dir,
 )
 from pexels import PexelsError, choose_video, download_video, search_videos
@@ -49,6 +51,10 @@ def load_script(path: Path) -> dict:
             raise ValueError(f"Video scene {index} requires search_query.")
         if scene["scene_type"] == "video" and scene.get("pan_region", VIDEO_PAN_REGION) not in {"top_50", "bottom_50"}:
             raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
+        if scene["scene_type"] == "video" and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
+            raise ValueError(f'Video scene {index} pan_direction must be "top_to_bottom" or "bottom_to_top".')
+        if scene.get("text_position", VIDEO_TEXT_POSITION) not in {"middle", "bottom"}:
+            raise ValueError(f'Scene {index} text_position must be "middle" or "bottom."')
         background = BACKGROUNDS[(index - 1) % len(BACKGROUNDS)]
         if background == previous_background:
             raise ValueError("Text scene backgrounds must not repeat consecutively.")
@@ -87,10 +93,10 @@ def process(script: dict) -> Path:
                 selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
-            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_region=scene.get("pan_region", VIDEO_PAN_REGION))
+            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION), pan_region=scene.get("pan_region", VIDEO_PAN_REGION), text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
         else:
             background = BACKGROUNDS[index % len(BACKGROUNDS)]
-            create_text_scene(audio_path, scene["text"], duration, background, scene_path)
+            create_text_scene(audio_path, scene["text"], duration, background, scene_path, text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
         scene_paths.append(scene_path)
 
     final_path = output_dir / "final.mp4"
