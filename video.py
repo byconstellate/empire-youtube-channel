@@ -7,7 +7,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from config import FONT_FILE, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_PAN_DIRECTION, VIDEO_PAN_REGION, VIDEO_WIDTH
+from config import FONT_FILE, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_PAN_DIRECTION, VIDEO_PAN_REGION, VIDEO_TEXT_POSITION, VIDEO_WIDTH
 
 
 class FFmpegError(RuntimeError):
@@ -53,16 +53,18 @@ def _caption_file(text: str) -> Path:
     return caption_path
 
 
-def caption_filter(caption_path: Path) -> str:
+def caption_filter(caption_path: Path, text_position: str = VIDEO_TEXT_POSITION) -> str:
+    if text_position not in {"middle", "bottom"}:
+        raise FFmpegError('TEXT_POSITION must be "middle" or "bottom".')
     path = caption_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
     font = ":".join(_font_args())
     prefix = f"{font}:" if font else ""
+    y_position = "(h-text_h)/2" if text_position == "middle" else "h*0.72"
     return (
         f"drawtext={prefix}textfile='{path}':"
         "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
-        "x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=12"
+        f"x=(w-text_w)/2:y={y_position}:line_spacing=12"
     )
-
 
 def footage_filter(
     text: str,
@@ -70,6 +72,7 @@ def footage_filter(
     pan_direction: str,
     pan_region: str = VIDEO_PAN_REGION,
     caption_path: Path | None = None,
+    text_position: str = VIDEO_TEXT_POSITION,
 ) -> str:
     """Scale footage and pan within the selected top or bottom half."""
     if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
@@ -86,7 +89,7 @@ def footage_filter(
     return (
         f"scale={VIDEO_WIDTH}:-2:force_original_aspect_ratio=increase,"
         f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:0:{y_position},"
-        f"setsar=1,{caption_filter(caption_path)}"
+        f"setsar=1,{caption_filter(caption_path, text_position)}"
     )
 
 
@@ -98,11 +101,12 @@ def create_video_scene(
     output: Path,
     pan_direction: str = VIDEO_PAN_DIRECTION,
     pan_region: str = VIDEO_PAN_REGION,
+    text_position: str = VIDEO_TEXT_POSITION,
 ) -> None:
     caption_path = _caption_file(text)
     try:
         video_filter = (
-            footage_filter(text, duration, pan_direction, pan_region, caption_path)
+            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position)
         )
         run_ffmpeg(
             [
@@ -143,10 +147,10 @@ def create_video_scene(
 
     finally:
         caption_path.unlink(missing_ok=True)
-def create_text_scene(audio: Path, text: str, duration: float, background: str, output: Path) -> None:
+def create_text_scene(audio: Path, text: str, duration: float, background: str, output: Path, text_position: str = VIDEO_TEXT_POSITION) -> None:
     caption_path = _caption_file(text)
     try:
-        video_filter = caption_filter(caption_path)
+        video_filter = caption_filter(caption_path, text_position)
         run_ffmpeg(
             [
                 "-f",
