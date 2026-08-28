@@ -1,6 +1,6 @@
 const API_BASE = (document.querySelector("meta[name=\"api-base\"]")?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
-function backendUnavailableMessage() { return "Instant preview is ready. Add ?api=https://your-backend-url to this Pages URL for GIPHY clips and MP4 export."; }
+function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
@@ -28,10 +28,9 @@ let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
 function renderScenes(script) {
-  const total = script.scenes.reduce((sum, scene) => sum + Number(scene.duration_seconds), 0);
-  count.textContent = `${script.scenes.length} scenes · ${total} sec`;
+  count.textContent = `${script.scenes.length} scenes`;
   script.scenes.forEach((scene) => {
-    if (scene.scene_type === "video") {
+    if (scene.scene_type !== "text") {
       scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50";
       scene.pan_direction = scene.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     }
@@ -40,10 +39,10 @@ function renderScenes(script) {
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
       <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
-      <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
+      <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.scene_type === "text" ? "Full-screen text" : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}</small>
         ${scene.scene_type === "video" ? `<label class="scene-control">Pan area <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option></select></label><label class="scene-control">Pan motion <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}"><option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option><option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option></select></label>` : ""}
         <label class="scene-control">Text position <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}"><option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option><option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option></select></label>
-        ${scene.scene_type === "video" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
+        ${scene.scene_type !== "text" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
@@ -53,6 +52,18 @@ function plainTextToScript(text) {
   return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "video" })) };
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
+function normalizeScript(script) {
+  return { ...script, scenes: script.scenes.map((scene, index) => {
+    const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
+    if (!normalized.text) throw new Error("Every line needs text.");
+    normalized.scene_type = ["text", "gif", "video"].includes(normalized.scene_type) ? normalized.scene_type : "text";
+    normalized.search_query = normalized.scene_type === "text" ? "" : String(normalized.search_query || normalized.text);
+    normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
+    normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
+    normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
+    return normalized;
+  }) };
+}
 async function loadFootagePreviews(script, expand = false) {
   if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
   const response = await fetch(apiUrl("/api/preview"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
@@ -64,17 +75,18 @@ async function loadFootagePreviews(script, expand = false) {
     const target = article?.querySelector(".scene-copy") || scenes.querySelector(".line-builder");
     if (!scene || !target) return;
     const box = document.createElement("div"); box.className = "footage-previews";
-    const label = document.createElement("small"); label.textContent = "Select a GIPHY clip for this line:"; box.appendChild(label);
+    const providerName = scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video";
+    const label = document.createElement("small"); label.textContent = `Select a ${providerName} for this line:`; box.appendChild(label);
     preview.candidates.forEach((candidate, index) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
-      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview GIPHY candidate ${index + 1}`; button.appendChild(video);
+      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview ${providerName} candidate ${index + 1}`; button.appendChild(video);
       const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
       button.addEventListener("click", () => {
         scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
       });
       box.appendChild(button);
     });
-    article.querySelector(".scene-copy").appendChild(box);
+    target.appendChild(box);
   });
 }
 async function loadScript() {
@@ -82,8 +94,8 @@ async function loadScript() {
     let script;
     try { script = JSON.parse(input.value); } catch (parseError) { script = plainTextToScript(input.value); }
     if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
-    if (script.scenes.some((scene) => !scene || !scene.text || !scene.scene_type || !scene.duration_seconds)) throw new Error("Each scene needs text, scene_type, and duration_seconds.");
-    currentScript = script;
+    if (script.scenes.some((scene) => !scene || !scene.text)) throw new Error("Each scene needs text.");
+    currentScript = normalizeScript(script);
     error.textContent = "";
     renderScenes(script);
     loadButton.innerHTML = "Script loaded ✓";
@@ -203,7 +215,7 @@ if (lineFileInput) {
 const uploadTitle = document.querySelector(".upload strong");
 const uploadHint = document.querySelector(".upload small");
 if (uploadTitle) uploadTitle.textContent = "Load a script — one line becomes one scene";
-if (uploadHint) uploadHint.textContent = "Choose video or text for each line, then move to the next";
+if (uploadHint) uploadHint.textContent = "Choose text, GIF, or video for each line; media searches use the line automatically";
 input.setAttribute("aria-label", "Script lines");
 input.placeholder = "One script line per scene…";
 input.value = sampleScript.scenes.map((scene) => scene.text).join("\n");
@@ -215,13 +227,13 @@ function parseLineByLineScript() {
   let parsed;
   try { parsed = JSON.parse(raw); } catch (parseError) { parsed = null; }
   if (parsed && !Array.isArray(parsed.scenes)) throw new Error("A JSON script must contain a scenes array, or paste one scene per line.");
-  const sourceScenes = parsed ? parsed.scenes : raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text, index) => ({ scene_id: String(index + 1), text, duration_seconds: 5, scene_type: "video", search_query: text }));
+  const sourceScenes = parsed ? parsed.scenes : raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text, index) => ({ scene_id: String(index + 1), text, duration_seconds: 5, scene_type: "text" }));
   if (!sourceScenes.length) throw new Error("Add at least one line to your script.");
   const normalizedScenes = sourceScenes.map((scene, index) => {
     const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
     if (!normalized.text) throw new Error("Every line needs text.");
-    normalized.scene_type = normalized.scene_type === "text" ? "text" : "video";
-    normalized.search_query = normalized.scene_type === "video" ? String(normalized.search_query || normalized.text) : "";
+    normalized.scene_type = ["text", "gif", "video"].includes(normalized.scene_type) ? normalized.scene_type : "text";
+    normalized.search_query = normalized.scene_type === "text" ? "" : String(normalized.search_query || normalized.text);
     normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
     normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
@@ -242,27 +254,17 @@ function renderLineBuilder() {
     return;
   }
   const scene = currentScript.scenes[activeLineIndex];
-  const isVideo = scene.scene_type === "video";
+  const isMedia = scene.scene_type !== "text";
   scenes.innerHTML = "";
   const builder = document.createElement("section");
   builder.className = "line-builder";
-  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="video">Video</button><button type="button" data-line-type="text">Text</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Searching GIPHY for this line automatically…</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
+  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="text">Text</button><button type="button" data-line-type="gif">GIF</button><button type="button" data-line-type="video">Video</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Searching GIPHY for this line automatically…</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
   builder.querySelector(".line-builder-head span").textContent = "Line " + (activeLineIndex + 1) + " of " + currentScript.scenes.length;
   builder.querySelector(".line-builder-text").textContent = scene.text;
   builder.querySelector('[data-line-type="' + scene.scene_type + '"]').classList.add("active");
   const grid = builder.querySelector(".line-builder-grid");
-  const durationLabel = document.createElement("label");
-  durationLabel.textContent = "Duration (seconds)";
-  durationLabel.innerHTML += '<input type="number" min="1" max="60" step="1" data-line-duration>'; 
-  durationLabel.querySelector("input").value = scene.duration_seconds;
-  grid.appendChild(durationLabel);
-  if (isVideo) {
-    const queryLabel = document.createElement("label");
-    queryLabel.textContent = "Footage search";
-    queryLabel.innerHTML += '<input type="text" data-line-query>'; 
-    queryLabel.querySelector("input").value = scene.search_query || scene.text;
-    grid.appendChild(queryLabel);
-    const panRegionLabel = document.createElement("label");
+  if (isMedia) {
+        const panRegionLabel = document.createElement("label");
     panRegionLabel.textContent = "Pan area";
     panRegionLabel.innerHTML += '<select data-pan-region="' + activeLineIndex + '"><option value="top_50">Top half</option><option value="bottom_50">Bottom half</option></select>';
     panRegionLabel.querySelector("select").value = scene.pan_region;
@@ -281,22 +283,19 @@ function renderLineBuilder() {
   const status = builder.querySelector(".line-builder-status");
   const nextButton = builder.querySelector("[data-line-next]");
   const previousButton = builder.querySelector("[data-line-prev]");
-  const syncNextButton = () => { nextButton.disabled = scene.scene_type === "video" && !(scene.selected_video && scene.selected_video.video_files); };
+  const syncNextButton = () => { nextButton.disabled = isMedia && !(scene.selected_video && scene.selected_video.video_files); };
   builder.querySelectorAll("[data-line-type]").forEach((button) => button.addEventListener("click", () => {
     scene.scene_type = button.dataset.lineType;
-    if (scene.scene_type === "video") scene.search_query = scene.search_query || scene.text;
+    if (scene.scene_type !== "text") scene.search_query = scene.text;
     else { scene.search_query = ""; delete scene.selected_video; }
     renderLineBuilder();
   }));
-  builder.querySelector('[data-line-duration]').addEventListener("change", (event) => { scene.duration_seconds = Math.max(1, Math.min(60, Number(event.target.value) || 5)); });
-  const queryInput = builder.querySelector("[data-line-query]");
-  if (queryInput) queryInput.addEventListener("change", (event) => { scene.search_query = event.target.value.trim() || scene.text; renderLineBuilder(); });
   previousButton.disabled = activeLineIndex === 0;
   previousButton.addEventListener("click", () => { if (activeLineIndex > 0) { activeLineIndex -= 1; renderLineBuilder(); } });
   nextButton.textContent = activeLineIndex === currentScript.scenes.length - 1 ? "Finish scene setup ✓" : "Next line →";
   nextButton.addEventListener("click", () => { activeLineIndex += 1; renderLineBuilder(); });
   scenes.appendChild(builder);
-  if (!isVideo) {
+  if (!isMedia) {
     status.textContent = "Text scene ready. Choose its position, then continue.";
     syncNextButton();
     return;
@@ -306,7 +305,7 @@ function renderLineBuilder() {
     if (requestToken !== lineFetchToken) return;
     const footageLabel = builder.querySelector(".footage-previews small");
     if (footageLabel) footageLabel.textContent = "Select a GIPHY clip for this line:";
-    status.textContent = "Select a GIPHY clip below, then continue to the next line.";
+    status.textContent = `Select a ${scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video"} below, then continue to the next line.`;
     syncNextButton();
   }).catch((err) => {
     if (requestToken !== lineFetchToken) return;
@@ -331,7 +330,7 @@ scenes.addEventListener("click", (event) => {
   window.setTimeout(() => {
     const active = currentScript.scenes[activeLineIndex];
     const next = scenes.querySelector("[data-line-next]");
-    if (active && next) next.disabled = !(active.selected_video && active.selected_video.video_files);
+    if (active && next) next.disabled = active.scene_type !== "text" && !(active.selected_video && active.selected_video.video_files);
   }, 0);
 });
 renderLineBuilder();
