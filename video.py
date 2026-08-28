@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -44,22 +45,20 @@ def wrap_caption(text: str) -> str:
     )
 
 
-def _escape_drawtext(text: str) -> str:
-    return (
-        text.replace("\\", "\\\\")
-        .replace(":", "\\:")
-        .replace("'", "\\'")
-        .replace("%", "\\%")
-        .replace("\n", "\\\\n")
-    )
+def _caption_file(text: str) -> Path:
+    handle, path = tempfile.mkstemp(prefix="empire_caption_", suffix=".txt")
+    os.close(handle)
+    caption_path = Path(path)
+    caption_path.write_text(wrap_caption(text), encoding="utf-8")
+    return caption_path
 
 
-def caption_filter(text: str) -> str:
+def caption_filter(caption_path: Path) -> str:
+    path = caption_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
     font = ":".join(_font_args())
     prefix = f"{font}:" if font else ""
-    wrapped = _escape_drawtext(wrap_caption(text))
     return (
-        f"drawtext={prefix}text='{wrapped}':"
+        f"drawtext={prefix}textfile='{path}':"
         "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
         "x=(w-text_w)/2:y=h*0.72:line_spacing=12"
     )
@@ -70,6 +69,7 @@ def footage_filter(
     duration: float,
     pan_direction: str,
     pan_region: str = VIDEO_PAN_REGION,
+    caption_path: Path | None = None,
 ) -> str:
     """Scale footage and pan within the selected top or bottom half."""
     if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
@@ -86,7 +86,7 @@ def footage_filter(
     return (
         f"scale={VIDEO_WIDTH}:-2:force_original_aspect_ratio=increase,"
         f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:0:{y_position},"
-        f"setsar=1,{caption_filter(text)}"
+        f"setsar=1,{caption_filter(caption_path)}"
     )
 
 
@@ -99,81 +99,91 @@ def create_video_scene(
     pan_direction: str = VIDEO_PAN_DIRECTION,
     pan_region: str = VIDEO_PAN_REGION,
 ) -> None:
-    video_filter = (
-        footage_filter(text, duration, pan_direction, pan_region)
-    )
-    run_ffmpeg(
-        [
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(footage),
-            "-i",
-            str(audio),
-            "-t",
-            str(duration),
-            "-vf",
-            video_filter,
-            "-r",
-            str(VIDEO_FPS),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-af",
-            f"apad=whole_dur={duration}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "28",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-shortest",
-            str(output),
-        ]
-    )
+    caption_path = _caption_file(text)
+    try:
+        video_filter = (
+            footage_filter(text, duration, pan_direction, pan_region, caption_path)
+        )
+        run_ffmpeg(
+            [
+                "-stream_loop",
+                "-1",
+                "-i",
+                str(footage),
+                "-i",
+                str(audio),
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-r",
+                str(VIDEO_FPS),
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-af",
+                f"apad=whole_dur={duration}",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "28",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+                str(output),
+            ]
+        )
 
 
+
+    finally:
+        caption_path.unlink(missing_ok=True)
 def create_text_scene(audio: Path, text: str, duration: float, background: str, output: Path) -> None:
-    video_filter = caption_filter(text)
-    run_ffmpeg(
-        [
-            "-f",
-            "lavfi",
-            "-i",
-            f"color=c={background}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:r={VIDEO_FPS}",
-            "-i",
-            str(audio),
-            "-t",
-            str(duration),
-            "-vf",
-            video_filter,
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-af",
-            f"apad=whole_dur={duration}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "28",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-shortest",
-            str(output),
-        ]
-    )
+    caption_path = _caption_file(text)
+    try:
+        video_filter = caption_filter(caption_path)
+        run_ffmpeg(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c={background}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:r={VIDEO_FPS}",
+                "-i",
+                str(audio),
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-af",
+                f"apad=whole_dur={duration}",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "28",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+                str(output),
+            ]
+        )
 
 
+
+    finally:
+        caption_path.unlink(missing_ok=True)
 def combine_scenes(scene_paths: list[Path], output: Path, work_dir: Path) -> None:
     concat_file = work_dir / "concat.txt"
     concat_file.write_text(
