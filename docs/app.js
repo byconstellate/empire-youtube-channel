@@ -186,7 +186,7 @@ function parseLineByLineScript() {
   let parsed;
   try { parsed = JSON.parse(raw); } catch (parseError) { parsed = null; }
   if (parsed && !Array.isArray(parsed.scenes)) throw new Error("A JSON script must contain a scenes array, or paste one scene per line.");
-  const sourceScenes = parsed ? parsed.scenes : raw.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean).map((text, index) => ({ scene_id: String(index + 1), text, duration_seconds: 5, scene_type: "video", search_query: text }));
+  const sourceScenes = parsed ? parsed.scenes : raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text, index) => ({ scene_id: String(index + 1), text, duration_seconds: 5, scene_type: "video", search_query: text }));
   if (!sourceScenes.length) throw new Error("Add at least one line to your script.");
   const normalizedScenes = sourceScenes.map((scene, index) => {
     const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
