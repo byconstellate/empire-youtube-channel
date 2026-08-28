@@ -58,6 +58,14 @@ function plainTextToScript(text) {
   return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "text" })) };
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
+async function readApiError(response, fallback) {
+  try {
+    const data = await response.json();
+    return data?.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
 function normalizeScript(script) {
   return { ...script, scenes: script.scenes.map((scene, index) => {
     const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
@@ -73,7 +81,7 @@ function normalizeScript(script) {
 async function loadFootagePreviews(script, expand = false) {
   if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
   const response = await fetch(apiUrl("/api/preview"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
-  if (!response.ok) throw new Error(await response.text() || "Could not load media previews.");
+  if (!response.ok) throw new Error(await readApiError(response, "Could not load media previews."));
   const data = await response.json();
   data.scenes.forEach((preview) => {
     const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
@@ -139,7 +147,7 @@ renderButton.addEventListener("click", async () => {
   try {
     if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
     const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
-    if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
+    if (!response.ok) throw new Error(await readApiError(response, "The renderer could not start."));
     if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
     let state = { status: "queued" };
