@@ -6,6 +6,8 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
+      - key: GIPHY_API_KEY
+        sync: false
       - key: PEXELS_API_KEY
         sync: false
       - key: AUTO_APPROVE_FOOTAGE
