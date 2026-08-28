@@ -62,7 +62,7 @@ def caption_filter(caption_path: Path, text_position: str = VIDEO_TEXT_POSITION)
     y_position = "(h-text_h)/2" if text_position == "middle" else "h*0.72"
     return (
         f"drawtext={prefix}textfile='{path}':"
-        "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
+        "fontcolor=#ff00ff:text_align=center:fontsize=52:borderw=4:bordercolor=white:"
         f"x=(w-text_w)/2:y={y_position}:line_spacing=12"
     )
 
