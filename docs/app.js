@@ -46,10 +46,10 @@ function renderBrowserPreview(script) {
   if (!preview) return;
   preview.innerHTML = script.scenes.map((scene, index) => {
     const videoUrl = scene.selected_video?.preview_url || "";
-    const media = scene.scene_type === "video" && videoUrl
+    const media = scene.scene_type !== "text" && videoUrl
       ? `<video src="${escapeHtml(videoUrl)}" muted playsinline controls preload="metadata"></video>`
-      : `<div class="preview-placeholder ${scene.scene_type === "text" ? "preview-text" : "preview-video"}"><span>${scene.scene_type === "text" ? "TEXT SCENE" : "VIDEO SCENE"}</span><strong>${escapeHtml(scene.text)}</strong></div>`;
-    return `<article class="browser-preview-card"><div class="browser-preview-media">${media}</div><div class="browser-preview-label"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds}s · ${scene.scene_type === "video" ? (videoUrl ? "footage loaded" : "footage pending") : "full-screen text"}</small></div></article>`;
+      : `<div class="preview-placeholder ${scene.scene_type === "text" ? "preview-text" : "preview-video"}"><span>${scene.scene_type === "text" ? "TEXT SCENE" : (scene.scene_type === "gif" ? "GIF SCENE" : "VIDEO SCENE")}</span><strong>${escapeHtml(scene.text)}</strong></div>`;
+    return `<article class="browser-preview-card"><div class="browser-preview-media">${media}</div><div class="browser-preview-label"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(scene.text)}</strong><small>${scene.scene_type === "text" ? "full-screen text" : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}</small></div></article>`;
   }).join("");
 }
 function plainTextToScript(text) {
