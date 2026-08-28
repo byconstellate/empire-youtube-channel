@@ -15,7 +15,7 @@ PROJECTS_DIR = ROOT / "projects"
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 GOOGLE_TTS_LANGUAGE = os.getenv("GOOGLE_TTS_LANGUAGE", "en")
 
-# Landscape output for YouTube: 1920x1080 by default.
+# Landscape output for YouTube: standard 1280x720 HD.
 VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1280"))
 VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "720"))
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "24"))
