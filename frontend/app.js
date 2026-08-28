@@ -1,6 +1,6 @@
 const API_BASE = (document.querySelector("meta[name=\"api-base\"]")?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
-function backendUnavailableMessage() { return "Instant preview is ready. Add ?api=https://your-backend-url to this Pages URL for Pexels footage and MP4 export."; }
+function backendUnavailableMessage() { return "Instant preview is ready. Add ?api=https://your-backend-url to this Pages URL for GIPHY clips and MP4 export."; }
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
@@ -61,12 +61,13 @@ async function loadFootagePreviews(script, expand = false) {
   data.scenes.forEach((preview) => {
     const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
     const article = [...scenes.querySelectorAll(".scene")].find((item) => item.dataset.scene === String(script.scenes.indexOf(scene)));
-    if (!scene || !article) return;
+    const target = article?.querySelector(".scene-copy") || scenes.querySelector(".line-builder");
+    if (!scene || !target) return;
     const box = document.createElement("div"); box.className = "footage-previews";
-    const label = document.createElement("small"); label.textContent = "Preview footage, then approve one:"; box.appendChild(label);
+    const label = document.createElement("small"); label.textContent = "Select a GIPHY clip for this line:"; box.appendChild(label);
     preview.candidates.forEach((candidate, index) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
-      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview Pexels candidate ${index + 1}`; button.appendChild(video);
+      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview GIPHY candidate ${index + 1}`; button.appendChild(video);
       const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
       button.addEventListener("click", () => {
         scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
@@ -204,7 +205,7 @@ const uploadHint = document.querySelector(".upload small");
 if (uploadTitle) uploadTitle.textContent = "Load a script — one line becomes one scene";
 if (uploadHint) uploadHint.textContent = "Choose video or text for each line, then move to the next";
 input.setAttribute("aria-label", "Script lines");
-input.placeholder = "One scene per line…";
+input.placeholder = "One script line per scene…";
 input.value = sampleScript.scenes.map((scene) => scene.text).join("\n");
 let activeLineIndex = 0;
 let lineFetchToken = 0;
@@ -245,7 +246,7 @@ function renderLineBuilder() {
   scenes.innerHTML = "";
   const builder = document.createElement("section");
   builder.className = "line-builder";
-  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="video">Video</button><button type="button" data-line-type="text">Text</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Finding footage for this line automatically…</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
+  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="video">Video</button><button type="button" data-line-type="text">Text</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Searching GIPHY for this line automatically…</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
   builder.querySelector(".line-builder-head span").textContent = "Line " + (activeLineIndex + 1) + " of " + currentScript.scenes.length;
   builder.querySelector(".line-builder-text").textContent = scene.text;
   builder.querySelector('[data-line-type="' + scene.scene_type + '"]').classList.add("active");
@@ -304,8 +305,8 @@ function renderLineBuilder() {
   loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, true).then(() => {
     if (requestToken !== lineFetchToken) return;
     const footageLabel = builder.querySelector(".footage-previews small");
-    if (footageLabel) footageLabel.textContent = "Select a video for this line:";
-    status.textContent = "Select a video below, then continue to the next line.";
+    if (footageLabel) footageLabel.textContent = "Select a GIPHY clip for this line:";
+    status.textContent = "Select a GIPHY clip below, then continue to the next line.";
     syncNextButton();
   }).catch((err) => {
     if (requestToken !== lineFetchToken) return;
@@ -334,3 +335,4 @@ scenes.addEventListener("click", (event) => {
   }, 0);
 });
 renderLineBuilder();
+
