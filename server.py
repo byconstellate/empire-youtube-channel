@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request, send_file
 
 from config import GOOGLE_TTS_LANGUAGE, VIDEO_PAN_REGION
 from giphy import search_gifs
+from pexels import search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 jobs = {}
@@ -39,7 +40,7 @@ def index():
   return app.send_static_file("index.html")
 
 
-def compact_video(video: dict) -> dict:
+def compact_video(video: dict, media_type: str) -> dict:
   files = video.get("video_files", [])
   preview = next((item for item in files if item.get("width", 0) <= item.get("height", 0)), None) or (files[0] if files else {})
   return {
@@ -48,6 +49,8 @@ def compact_video(video: dict) -> dict:
       "duration": video.get("duration"),
       "preview_url": preview.get("link", ""),
       "video_files": files,
+      "media_type": media_type,
+      "provider": "giphy" if media_type == "gif" else "pexels",
   }
 
 
@@ -88,7 +91,8 @@ def preview():
   previews = []
   try:
       for scene in payload["scenes"]:
-          if scene.get("media_type", scene.get("scene_type")) != "video":
+          media_type = scene.get("media_type", scene.get("scene_type"))
+          if media_type not in {"gif", "video"}:
               continue
           query = str(scene.get("search_query") or scene.get("text") or "").strip()
           if not query:
@@ -98,13 +102,16 @@ def preview():
               queries.extend(f"{query} {suffix}" for suffix in ("pink", "woman", "aesthetic", "baddie"))
           candidates = []
           seen_ids = set()
+          searcher = search_gifs if media_type == "gif" else search_videos
+          api_key = os.getenv("GIPHY_API_KEY", "") if media_type == "gif" else os.getenv("PEXELS_API_KEY", "")
           for search_query in queries:
-              for video in search_gifs(os.getenv("GIPHY_API_KEY", ""), search_query):
+              found = searcher(api_key, search_query)
+              for video in found:
                   video_id = video.get("id")
                   if video_id in seen_ids:
                       continue
                   seen_ids.add(video_id)
-                  candidates.append(compact_video(video))
+                  candidates.append(compact_video(video, media_type))
           previews.append({"scene_id": str(scene.get("scene_id")), "candidates": candidates})
   except Exception as exc:
       return jsonify(error=str(exc)), 422
