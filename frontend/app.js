@@ -21,13 +21,6 @@ const downloadButton = document.querySelector("#download-button");
 let renderedVideoUrl = "";
 renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Review your scenes and footage, then render the finished video.";
-const languageSelect = document.querySelector("#language");
-if (languageSelect && !document.querySelector("#pan-region")) {
-  const panLabel = document.createElement("label"); panLabel.htmlFor = "pan-region"; panLabel.textContent = "Pan crop";
-  const panSelect = document.createElement("select"); panSelect.id = "pan-region"; panSelect.innerHTML = '<option value="top_50">Top 50%</option><option value="bottom_50">Bottom 50%</option>';
-  languageSelect.insertAdjacentElement("afterend", panLabel); panLabel.insertAdjacentElement("afterend", panSelect);
-}
-
 document.querySelector("#preview-footage")?.remove();
 document.querySelector("#more-footage")?.remove();
 loadButton.innerHTML = "Load script + find more <span>→</span>";
@@ -37,11 +30,12 @@ input.value = JSON.stringify(sampleScript, null, 2);
 function renderScenes(script) {
   const total = script.scenes.reduce((sum, scene) => sum + Number(scene.duration_seconds), 0);
   count.textContent = `${script.scenes.length} scenes · ${total} sec`;
+  script.scenes.forEach((scene) => { if (scene.scene_type === "video") scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50"; });
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
       <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.duration_seconds} sec${scene.search_query ? ` · ${escapeHtml(scene.search_query)}` : " · Full-screen text"}</small>
-        ${scene.scene_type === "video" ? '<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>' : ""}
+        ${scene.scene_type === "video" ? `<label class="pan-control">Pan crop <select data-pan-region="${index}" aria-label="Pan crop for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top 50%</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom 50%</option></select></label><div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
 }
@@ -92,6 +86,11 @@ async function loadScript() {
 }
 loadButton.addEventListener("click", loadScript);
 document.querySelector("#script-file")?.addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; input.value = await file.text(); loadScript(); });
+scenes.addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-pan-region]"); if (!select) return;
+  const scene = currentScript.scenes[Number(select.dataset.panRegion)];
+  if (scene) scene.pan_region = select.value;
+});
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   event.preventDefault();
@@ -114,7 +113,7 @@ renderButton.addEventListener("click", async () => {
   error.textContent = "";
   try {
     if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
-    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value, pan_region: document.querySelector("#pan-region")?.value || "top_50" }) });
+    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
     if (!response.ok) throw new Error(await response.text() || "The renderer could not start.");
     if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
