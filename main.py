@@ -8,6 +8,7 @@ from pathlib import Path
 from config import (
     GOOGLE_TTS_LANGUAGE,
     PEXELS_API_KEY,
+    VIDEO_PAN_REGION,
     project_dir,
 )
 from pexels import PexelsError, choose_video, download_video, search_videos
@@ -46,6 +47,8 @@ def load_script(path: Path) -> dict:
             raise ValueError(f'Scene {index} scene_type must be "video" or "text".')
         if scene["scene_type"] == "video" and not scene.get("search_query"):
             raise ValueError(f"Video scene {index} requires search_query.")
+        if scene["scene_type"] == "video" and scene.get("pan_region", VIDEO_PAN_REGION) not in {"top_50", "bottom_50"}:
+            raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
         background = BACKGROUNDS[(index - 1) % len(BACKGROUNDS)]
         if background == previous_background:
             raise ValueError("Text scene backgrounds must not repeat consecutively.")
@@ -84,7 +87,7 @@ def process(script: dict) -> Path:
                 selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
-            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path)
+            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_region=scene.get("pan_region", VIDEO_PAN_REGION))
         else:
             background = BACKGROUNDS[index % len(BACKGROUNDS)]
             create_text_scene(audio_path, scene["text"], duration, background, scene_path)
