@@ -60,7 +60,7 @@ def caption_filter(caption_path: Path) -> str:
     return (
         f"drawtext={prefix}textfile='{path}':"
         "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
-        "x=(w-text_w)/2:y=h*0.72:line_spacing=12"
+        "x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=12"
     )
 
 
