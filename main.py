@@ -7,12 +7,14 @@ from pathlib import Path
 
 from config import (
     GOOGLE_TTS_LANGUAGE,
+    GIPHY_API_KEY,
     PEXELS_API_KEY,
     VIDEO_PAN_DIRECTION,
     VIDEO_PAN_REGION,
     VIDEO_TEXT_POSITION,
     project_dir,
 )
+from giphy import GiphyError, search_gifs
 from pexels import PexelsError, choose_video, download_video, search_videos
 from tts import TTSError, generate_voice
 from video import FFmpegError, combine_scenes, create_text_scene, create_video_scene, ensure_ffmpeg
@@ -33,12 +35,15 @@ def load_script(path: Path) -> dict:
 
     previous_background = None
     for index, scene in enumerate(data["scenes"], start=1):
-        required = {"scene_id", "text", "duration_seconds", "scene_type"}
+        if not isinstance(scene, dict):
+            raise ValueError(f"Scene {index} must be an object.")
+        required = {"scene_id", "text", "scene_type"}
         missing = required - scene.keys()
         if missing:
             raise ValueError(f"Scene {index} is missing: {', '.join(sorted(missing))}.")
         if not isinstance(scene["text"], str) or not scene["text"].strip():
             raise ValueError(f"Scene {index} text must be a non-empty string.")
+        scene["duration_seconds"] = scene.get("duration_seconds", 5)
         try:
             duration = float(scene["duration_seconds"])
         except (TypeError, ValueError) as exc:
@@ -47,11 +52,11 @@ def load_script(path: Path) -> dict:
             raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 60 seconds.")
         if scene["scene_type"] not in {"video", "text"}:
             raise ValueError(f'Scene {index} scene_type must be "video" or "text".')
-        if scene["scene_type"] == "video" and not scene.get("search_query"):
-            raise ValueError(f"Video scene {index} requires search_query.")
-        if scene["scene_type"] == "video" and scene.get("pan_region", VIDEO_PAN_REGION) not in {"top_50", "bottom_50"}:
+        if scene["scene_type"] in {"video", "gif"} and not scene.get("search_query"):
+            raise ValueError(f"{scene["scene_type"].title()} scene {index} requires search_query.")
+        if scene["scene_type"] in {"video", "gif"} and scene.get("pan_region", VIDEO_PAN_REGION) not in {"top_50", "bottom_50"}:
             raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
-        if scene["scene_type"] == "video" and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
+        if scene["scene_type"] in {"video", "gif"} and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
             raise ValueError(f'Video scene {index} pan_direction must be "top_to_bottom" or "bottom_to_top".')
         if scene.get("text_position", VIDEO_TEXT_POSITION) not in {"middle", "bottom"}:
             raise ValueError(f'Scene {index} text_position must be "middle" or "bottom."')
@@ -83,14 +88,20 @@ def process(script: dict) -> Path:
         print(f"\nGenerating voice for scene {scene_id}...")
         generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
 
-        if scene["scene_type"] == "video":
+        if scene["scene_type"] in {"video", "gif"}:
             selected_video = scene.get("selected_video")
             if isinstance(selected_video, dict) and selected_video.get("video_files"):
                 print(f"Using approved footage for scene {scene_id}...")
                 selected = selected_video
             else:
-                print(f'Searching Pexels for "{scene["search_query"]}"...')
-                selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
+                print(f'Searching {"GIPHY" if scene["scene_type"] == "gif" else "Pexels"} for "{scene["search_query"]}"...')
+                if scene["scene_type"] == "gif":
+                    candidates = search_gifs(GIPHY_API_KEY, scene["search_query"])
+                    if not candidates:
+                        raise GiphyError(f'GIPHY returned no playable clips for "{scene["search_query"]}".')
+                    selected = candidates[0]
+                else:
+                    selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
             create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION), pan_region=scene.get("pan_region", VIDEO_PAN_REGION), text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
@@ -111,7 +122,7 @@ def main() -> int:
     try:
         script = load_script(args.script)
         final_path = process(script)
-    except (ValueError, PexelsError, TTSError, FFmpegError) as exc:
+    except (ValueError, GiphyError, PexelsError, TTSError, FFmpegError) as exc:
         print(f"\nError: {exc}", file=sys.stderr)
         return 1
     print(f"\nDone. Your video is ready at: {final_path}")
