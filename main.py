@@ -50,10 +50,10 @@ def load_script(path: Path) -> dict:
             raise ValueError(f"Scene {index} duration must be a number.") from exc
         if duration <= 0 or duration > 60:
             raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 60 seconds.")
-        if scene["scene_type"] not in {"video", "text"}:
-            raise ValueError(f'Scene {index} scene_type must be "video" or "text".')
+        if scene["scene_type"] not in {"video", "gif", "text"}:
+            raise ValueError(f'Scene {index} scene_type must be "video", "gif", or "text".')
         if scene["scene_type"] in {"video", "gif"} and not scene.get("search_query"):
-            raise ValueError(f"{scene["scene_type"].title()} scene {index} requires search_query.")
+            raise ValueError(f'{scene["scene_type"].title()} scene {index} requires search_query.')
         if scene["scene_type"] in {"video", "gif"} and scene.get("pan_region", VIDEO_PAN_REGION) not in {"top_50", "bottom_50"}:
             raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
         if scene["scene_type"] in {"video", "gif"} and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
@@ -94,7 +94,9 @@ def process(script: dict) -> Path:
                 print(f"Using approved footage for scene {scene_id}...")
                 selected = selected_video
             else:
-                print(f'Searching {"GIPHY" if scene["scene_type"] == "gif" else "Pexels"} for "{scene["search_query"]}"...')
+                provider = "GIPHY" if scene["scene_type"] == "gif" else "Pexels"
+                query = scene["search_query"]
+                print(f'Searching {provider} for "{query}"...')
                 if scene["scene_type"] == "gif":
                     candidates = search_gifs(GIPHY_API_KEY, scene["search_query"])
                     if not candidates:
