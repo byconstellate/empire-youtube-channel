@@ -1,5 +1,8 @@
 """GIPHY search helpers for the web scene editor."""
 
+import re
+from typing import Any
+
 import requests
 
 
@@ -7,7 +10,7 @@ class GiphyError(RuntimeError):
     pass
 
 
-def _number(value, default=0):
+def _number(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -28,13 +31,12 @@ def _video_file(images: dict) -> dict | None:
     return None
 
 
-def search_gifs(api_key: str, query: str, limit: int = 12) -> list[dict]:
-    if not api_key:
-        raise GiphyError("GIPHY_API_KEY is missing. Add it to your server environment.")
-    query = query.strip()
-    if not query:
-        raise GiphyError("GIPHY search needs a non-empty line of text.")
+def _compact_query(query: str) -> str:
+    words = re.findall(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?", query)
+    return " ".join(words[:6])[:64].strip()
 
+
+def _search(api_key: str, query: str, limit: int, retry_short: bool = True) -> list[dict]:
     try:
         response = requests.get(
             "https://api.giphy.com/v1/gifs/search",
@@ -48,10 +50,29 @@ def search_gifs(api_key: str, query: str, limit: int = 12) -> list[dict]:
             timeout=30,
         )
         response.raise_for_status()
-        gifs = response.json().get("data", [])
-    except (requests.RequestException, ValueError) as exc:
-        raise GiphyError(f"GIPHY search failed: {exc}") from exc
+        return response.json().get("data", [])
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status == 414 and retry_short:
+            shorter = " ".join(query.split()[:3])
+            if shorter and shorter != query:
+                return _search(api_key, shorter, limit, retry_short=False)
+        detail = f"HTTP {status}" if status else "a network error"
+        raise GiphyError(f"GIPHY search failed ({detail}). Try a shorter search phrase.") from exc
+    except requests.RequestException as exc:
+        raise GiphyError("GIPHY search failed. Check the server connection and try again.") from exc
+    except ValueError as exc:
+        raise GiphyError("GIPHY returned an invalid response.") from exc
 
+
+def search_gifs(api_key: str, query: str, limit: int = 12) -> list[dict]:
+    if not api_key:
+        raise GiphyError("GIPHY_API_KEY is missing. Add it to your server environment.")
+    query = _compact_query(query.strip())
+    if not query:
+        raise GiphyError("GIPHY search needs a non-empty line of text.")
+
+    gifs = _search(api_key, query, limit)
     candidates = []
     for gif in gifs:
         images = gif.get("images") or {}
