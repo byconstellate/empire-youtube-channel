@@ -18,6 +18,21 @@ function normalizeColors(scene) {
   scene.outline_color = valid(scene.outline_color, "#ffffff");
   scene.bg_color = valid(scene.bg_color, "#000000");
 }
+function parseDurationInput(value, fallback) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return fallback;
+  const parts = trimmed.split(":").map((part) => part.trim());
+  if (parts.some((part) => part === "" || Number.isNaN(Number(part)))) return fallback;
+  let seconds = 0;
+  for (const part of parts) seconds = seconds * 60 + Number(part);
+  return seconds > 0 ? seconds : fallback;
+}
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
