@@ -1,45 +1,70 @@
-const API_BASE = (document.querySelector("meta[name=\"api-base\"]")?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
+```javascript
+const API_BASE = (document.querySelector('meta[name="api-base"]')?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
 function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
+
 const TEXT_COLOR_OPTIONS = [
   { value: "#000000", label: "Black" },
   { value: "#ffffff", label: "White" },
   { value: "#00ff00", label: "Green" },
   { value: "#ff00ff", label: "Pink" },
 ];
+
 function colorSelectHtml(dataAttr, index, selected) {
   return `<select data-${dataAttr}="${index}">` + TEXT_COLOR_OPTIONS.map((o) =>
     `<option value="${o.value}" ${o.value === selected ? "selected" : ""}>${o.label}</option>`
   ).join("") + `</select>`;
 }
+
 function normalizeColors(scene) {
   const valid = (v, fallback) => (TEXT_COLOR_OPTIONS.some((o) => o.value === v) ? v : fallback);
   scene.text_color = valid(scene.text_color, "#ff00ff");
   scene.outline_color = valid(scene.outline_color, "#ffffff");
   scene.bg_color = valid(scene.bg_color, "#000000");
 }
+
 function parseDurationInput(value, fallback) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return fallback;
+
   const parts = trimmed.split(":").map((part) => part.trim());
-  if (parts.some((part) => part === "" || Number.isNaN(Number(part)))) return fallback;
+
+  if (parts.some((part) => part === "" || Number.isNaN(Number(part)))) {
+    return fallback;
+  }
+
   let seconds = 0;
   for (const part of parts) seconds = seconds * 60 + Number(part);
+
   return seconds > 0 ? seconds : fallback;
 }
+
 function formatDuration(totalSeconds) {
   const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
+
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
-    { scene_id: "1", text: "Your business doesn't need another strategy.", duration_seconds: 5, scene_type: "video", search_query: "woman working laptop business" },
-    { scene_id: "2", text: "It needs you to actually pick one.", duration_seconds: 5, scene_type: "text" }
+    {
+      scene_id: "1",
+      text: "Your business doesn't need another strategy.",
+      duration_seconds: 5,
+      scene_type: "video",
+      search_query: "woman working laptop business"
+    },
+    {
+      scene_id: "2",
+      text: "It needs you to actually pick one.",
+      duration_seconds: 5,
+      scene_type: "text"
+    }
   ]
 };
+
 const input = document.querySelector("#script-input");
 const scenes = document.querySelector("#scenes");
 const count = document.querySelector("#scene-count");
@@ -50,7 +75,9 @@ const renderHint = document.querySelector("#render-status");
 const renderPreview = document.querySelector("#render-preview");
 const renderVideo = document.querySelector("#render-video");
 const downloadButton = document.querySelector("#download-button");
+
 let audioToggle = document.querySelector("#audio-enabled");
+
 if (!audioToggle) {
   const audioControl = document.createElement("label");
   audioControl.className = "audio-toggle";
@@ -59,50 +86,180 @@ if (!audioToggle) {
   document.querySelector(".voice-panel .voice-note")?.before(audioControl);
   audioToggle = audioControl.querySelector("#audio-enabled");
 }
+
 let renderedVideoUrl = "";
+
 renderButton.innerHTML = "Export MP4 <span>→</span>";
-if (renderHint) renderHint.textContent = "Review your scenes and footage, then render the finished video.";
+
+if (renderHint) {
+  renderHint.textContent = "Review your scenes and footage, then render the finished video.";
+}
+
 document.querySelector("#preview-footage")?.remove();
 document.querySelector("#more-footage")?.remove();
+
 loadButton.innerHTML = "Load script + find more <span>→</span>";
+
 let currentScript = sampleScript;
+
 input.value = JSON.stringify(sampleScript, null, 2);
-if (audioToggle) audioToggle.checked = currentScript.audio_enabled === true;
-function syncAudioToggle() { if (audioToggle) audioToggle.checked = currentScript.audio_enabled === true; }
-audioToggle?.addEventListener("change", () => { currentScript.audio_enabled = audioToggle.checked; });
+
+if (audioToggle) {
+  audioToggle.checked = currentScript.audio_enabled === true;
+}
+
+function syncAudioToggle() {
+  if (audioToggle) {
+    audioToggle.checked = currentScript.audio_enabled === true;
+  }
+}
+
+audioToggle?.addEventListener("change", () => {
+  currentScript.audio_enabled = audioToggle.checked;
+});
 
 function renderScenes(script) {
   count.textContent = `${script.scenes.length} scenes`;
+
   script.scenes.forEach((scene) => {
     if (scene.scene_type !== "text") {
       scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50";
       scene.pan_direction = scene.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
       scene.show_text = scene.show_text !== false;
     }
+
     scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
-    <label class="scene-control">Duration (mm:ss) <input type="text" data-duration="${index}" value="${formatDuration(scene.duration_seconds)}" aria-label="Duration for scene ${index + 1}" /></label>
+    scene.duration_seconds = Number(scene.duration_seconds) > 0 ? Number(scene.duration_seconds) : 5;
+
     normalizeColors(scene);
   });
+
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
       <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
-      <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.scene_type === "text" ? "Full-screen text" : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}</small>
-        ${scene.scene_type === "video" ? `<label class="scene-control">Pan area <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option></select></label><label class="scene-control">Pan motion <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}"><option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option><option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option></select></label>` : ""}
-        <label class="scene-control">Text position <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}"><option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option><option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option></select></label>
-        <label class="scene-control">Text color ${colorSelectHtml("text-color", index, scene.text_color)}</label>
-        <label class="scene-control">Outline color ${colorSelectHtml("outline-color", index, scene.outline_color)}</label>
-        ${scene.scene_type === "text" ? `<label class="scene-control">Background color ${colorSelectHtml("bg-color", index, scene.bg_color)}</label>` : ""}
-        ${scene.scene_type !== "text" ? `<label class="scene-control scene-control-checkbox"><input type="checkbox" data-show-text="${index}" aria-label="Show text overlay for scene ${index + 1}" ${scene.show_text !== false ? "checked" : ""}> Show text overlay</label>` : ""}
-        ${scene.scene_type !== "text" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
-      </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
-    </article>`).join("");
+
+      <div class="scene-copy">
+        <strong>${escapeHtml(scene.text)}</strong>
+
+        <small>
+          ${scene.scene_type === "text"
+            ? "Full-screen text"
+            : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}
+        </small>
+
+        ${scene.scene_type === "video" ? `
+          <label class="scene-control">
+            Pan area
+            <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}">
+              <option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option>
+              <option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option>
+            </select>
+          </label>
+
+          <label class="scene-control">
+            Pan motion
+            <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}">
+              <option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option>
+              <option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option>
+            </select>
+          </label>
+        ` : ""}
+
+        <label class="scene-control">
+          Text position
+          <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}">
+            <option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option>
+            <option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option>
+          </select>
+        </label>
+
+        <label class="scene-control">
+          Duration (mm:ss)
+          <input
+            type="text"
+            data-duration="${index}"
+            value="${formatDuration(scene.duration_seconds)}"
+            aria-label="Duration for scene ${index + 1}"
+          />
+        </label>
+
+        <label class="scene-control">
+          Text color
+          ${colorSelectHtml("text-color", index, scene.text_color)}
+        </label>
+
+        <label class="scene-control">
+          Outline color
+          ${colorSelectHtml("outline-color", index, scene.outline_color)}
+        </label>
+
+        ${scene.scene_type === "text" ? `
+          <label class="scene-control">
+            Background color
+            ${colorSelectHtml("bg-color", index, scene.bg_color)}
+          </label>
+        ` : ""}
+
+        ${scene.scene_type !== "text" ? `
+          <label class="scene-control scene-control-checkbox">
+            <input
+              type="checkbox"
+              data-show-text="${index}"
+              aria-label="Show text overlay for scene ${index + 1}"
+              ${scene.show_text !== false ? "checked" : ""}
+            >
+            Show text overlay
+          </label>
+        ` : ""}
+
+        ${scene.scene_type !== "text" ? `
+          <div class="scene-actions">
+            <button type="button" data-action="approve" aria-pressed="false">
+              Approve footage
+            </button>
+            <button type="button" data-action="reject" aria-pressed="false">
+              Reject candidate
+            </button>
+          </div>
+        ` : ""}
+      </div>
+
+      <span class="scene-type">${scene.scene_type.toUpperCase()}</span>
+    </article>
+  `).join("");
 }
+
 function plainTextToScript(text) {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) throw new Error("Add at least one non-empty line to your script.");
-  return { project_id: "empire_text_script", scenes: lines.map((line, index) => ({ scene_id: String(index + 1), text: line, duration_seconds: 5, scene_type: "text" })) };
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    throw new Error("Add at least one non-empty line to your script.");
+  }
+
+  return {
+    project_id: "empire_text_script",
+    scenes: lines.map((line, index) => ({
+      scene_id: String(index + 1),
+      text: line,
+      duration_seconds: 5,
+      scene_type: "text"
+    }))
+  };
 }
-function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char])); }
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[char]));
+}
+
 async function readApiError(response, fallback) {
   try {
     const data = await response.json();
@@ -111,383 +268,1209 @@ async function readApiError(response, fallback) {
     return fallback;
   }
 }
+
 function normalizeScript(script) {
-  return { ...script, audio_enabled: script.audio_enabled === true, scenes: script.scenes.map((scene, index) => {
-    const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
-    if (!normalized.text) throw new Error("Every line needs text.");
-    normalized.scene_type = ["text", "gif", "video"].includes(normalized.scene_type) ? normalized.scene_type : "text";
-    normalized.search_query = normalized.scene_type === "text" ? "" : String(normalized.search_query || normalized.text);
-    normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
-    normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
-    normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
-    normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
-    normalizeColors(normalized);
-    return normalized;
-  }) };
+  return {
+    ...script,
+    audio_enabled: script.audio_enabled === true,
+    scenes: script.scenes.map((scene, index) => {
+      const normalized = {
+        ...scene,
+        scene_id: String(scene.scene_id || index + 1),
+        text: String(scene.text || "").trim(),
+        duration_seconds: Number(scene.duration_seconds) || 5
+      };
+
+      if (!normalized.text) {
+        throw new Error("Every line needs text.");
+      }
+
+      normalized.scene_type = ["text", "gif", "video"].includes(scene.scene_type)
+        ? scene.scene_type
+        : "text";
+
+      normalized.search_query =
+        normalized.scene_type === "text"
+          ? ""
+          : String(normalized.search_query || normalized.text);
+
+      normalized.pan_region =
+        normalized.pan_region === "bottom_50"
+          ? "bottom_50"
+          : "top_50";
+
+      normalized.pan_direction =
+        normalized.pan_direction === "bottom_to_top"
+          ? "bottom_to_top"
+          : "top_to_bottom";
+
+      normalized.text_position =
+        normalized.text_position === "middle"
+          ? "middle"
+          : "bottom";
+
+      normalized.show_text =
+        normalized.scene_type === "text"
+          ? true
+          : normalized.show_text !== false;
+
+      normalizeColors(normalized);
+
+      return normalized;
+    })
+  };
 }
+
 async function loadFootagePreviews(script, expand = false) {
-  if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
-  const response = await fetch(apiUrl("/api/preview"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...script, expand }) });
-  if (!response.ok) throw new Error(await readApiError(response, "Could not load media previews."));
+  if (!API_BASE && /github\.io$/i.test(window.location.hostname)) {
+    throw new Error(backendUnavailableMessage());
+  }
+
+  const response = await fetch(apiUrl("/api/preview"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      ...script,
+      expand
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, "Could not load media previews."));
+  }
+
   const data = await response.json();
+
   data.scenes.forEach((preview) => {
-    const scene = script.scenes.find((item) => String(item.scene_id) === String(preview.scene_id));
-    const article = [...scenes.querySelectorAll(".scene")].find((item) => item.dataset.scene === String(script.scenes.indexOf(scene)));
-    const target = article?.querySelector(".scene-copy") || scenes.querySelector(".line-builder");
+    const scene = script.scenes.find(
+      (item) => String(item.scene_id) === String(preview.scene_id)
+    );
+
+    const article = [...scenes.querySelectorAll(".scene")].find(
+      (item) => item.dataset.scene === String(script.scenes.indexOf(scene))
+    );
+
+    const target =
+      article?.querySelector(".scene-copy") ||
+      scenes.querySelector(".line-builder");
+
     if (!scene || !target) return;
+
     const existing = target.querySelector(".footage-previews");
+
     if (existing) existing.remove();
-    const box = document.createElement("div"); box.className = "footage-previews";
-    const providerName = scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video";
-    const label = document.createElement("small"); label.textContent = `Select a ${providerName} for this line:`; box.appendChild(label);
-    if (!preview.candidates.length) { const empty = document.createElement("span"); empty.className = "footage-empty"; empty.textContent = "No results for this search."; box.appendChild(empty); }
+
+    const box = document.createElement("div");
+    box.className = "footage-previews";
+
+    const providerName =
+      scene.scene_type === "gif"
+        ? "GIPHY GIF"
+        : "Pexels video";
+
+    const label = document.createElement("small");
+    label.textContent = `Select a ${providerName} for this line:`;
+    box.appendChild(label);
+
+    if (!preview.candidates.length) {
+      const empty = document.createElement("span");
+      empty.className = "footage-empty";
+      empty.textContent = "No results for this search.";
+      box.appendChild(empty);
+    }
+
     preview.candidates.forEach((candidate, index) => {
-      const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
-      const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview ${providerName} candidate ${index + 1}`; button.appendChild(video);
-      const caption = document.createElement("span"); caption.textContent = `Candidate ${index + 1}`; button.appendChild(caption);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "footage-choice";
+
+      const video = document.createElement("video");
+      video.src = candidate.preview_url;
+      video.controls = true;
+      video.muted = true;
+      video.preload = "metadata";
+      video.title = `Preview ${providerName} candidate ${index + 1}`;
+
+      button.appendChild(video);
+
+      const caption = document.createElement("span");
+      caption.textContent = `Candidate ${index + 1}`;
+      button.appendChild(caption);
+
       button.addEventListener("click", () => {
-        scene.selected_video = candidate; box.querySelectorAll(".footage-choice").forEach((item) => item.classList.remove("approved")); button.classList.add("approved"); caption.textContent = "Approved ✓";
+        scene.selected_video = candidate;
+
+        box.querySelectorAll(".footage-choice").forEach((item) => {
+          item.classList.remove("approved");
+        });
+
+        button.classList.add("approved");
+        caption.textContent = "Approved ✓";
       });
+
       box.appendChild(button);
     });
+
     target.appendChild(box);
   });
+
   return data;
 }
+
 async function loadScript() {
   try {
     let script;
-    try { script = JSON.parse(input.value); } catch (parseError) { script = plainTextToScript(input.value); }
-    if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
-    if (script.scenes.some((scene) => !scene || !scene.text)) throw new Error("Each scene needs text.");
+
+    try {
+      script = JSON.parse(input.value);
+    } catch (parseError) {
+      script = plainTextToScript(input.value);
+    }
+
+    if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) {
+      throw new Error("Add a project_id and at least one scene.");
+    }
+
+    if (script.scenes.some((scene) => !scene || !scene.text)) {
+      throw new Error("Each scene needs text.");
+    }
+
     currentScript = normalizeScript(script);
     syncAudioToggle();
     error.textContent = "";
-    renderScenes(script);
+
+    renderScenes(currentScript);
+
     loadButton.innerHTML = "Script loaded ✓";
-    window.setTimeout(() => { loadButton.innerHTML = "Load script + find more <span>→</span>"; }, 1800);
-    loadFootagePreviews(script, true).catch((err) => { error.textContent = err instanceof Error ? err.message : backendUnavailableMessage(); });
+
+    window.setTimeout(() => {
+      loadButton.innerHTML = "Load script + find more <span>→</span>";
+    }, 1800);
+
+    loadFootagePreviews(currentScript, true).catch((err) => {
+      error.textContent =
+        err instanceof Error
+          ? err.message
+          : backendUnavailableMessage();
+    });
   } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load that script.";
+    error.textContent =
+      err instanceof Error
+        ? err.message
+        : "Could not load that script.";
   }
 }
+
 loadButton.addEventListener("click", loadScript);
-document.querySelector("#script-file")?.addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; input.value = await file.text(); loadScript(); });
+
+document.querySelector("#script-file")?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  input.value = await file.text();
+  loadScript();
+});
+
 scenes.addEventListener("change", (event) => {
+  const durationInput = event.target.closest("input[data-duration]");
+
+  if (durationInput) {
+    const index = Number(durationInput.dataset.duration);
+    const scene = currentScript.scenes[index];
+
+    if (scene) {
+      const parsed = parseDurationInput(
+        durationInput.value,
+        scene.duration_seconds
+      );
+
+      scene.duration_seconds = parsed;
+      durationInput.value = formatDuration(parsed);
+    }
+
+    return;
+  }
+
   const panRegion = event.target.closest("select[data-pan-region]");
+
   if (panRegion) {
-    const scene = currentScript.scenes[Number(panRegion.dataset.panRegion)];
-    if (scene) scene.pan_region = panRegion.value;
+    const scene =
+      currentScript.scenes[Number(panRegion.dataset.panRegion)];
+
+    if (scene) {
+      scene.pan_region = panRegion.value;
+    }
+
     return;
   }
+
   const panDirection = event.target.closest("select[data-pan-direction]");
+
   if (panDirection) {
-    const scene = currentScript.scenes[Number(panDirection.dataset.panDirection)];
-    if (scene) scene.pan_direction = panDirection.value;
+    const scene =
+      currentScript.scenes[Number(panDirection.dataset.panDirection)];
+
+    if (scene) {
+      scene.pan_direction = panDirection.value;
+    }
+
     return;
   }
+
   const textPosition = event.target.closest("select[data-text-position]");
+
   if (textPosition) {
-    const scene = currentScript.scenes[Number(textPosition.dataset.textPosition)];
-    if (scene) scene.text_position = textPosition.value;
+    const scene =
+      currentScript.scenes[Number(textPosition.dataset.textPosition)];
+
+    if (scene) {
+      scene.text_position = textPosition.value;
+    }
+
     return;
   }
+
   const textColor = event.target.closest("select[data-text-color]");
+
   if (textColor) {
-    const scene = currentScript.scenes[Number(textColor.dataset.textColor)];
-    if (scene) scene.text_color = textColor.value;
+    const scene =
+      currentScript.scenes[Number(textColor.dataset.textColor)];
+
+    if (scene) {
+      scene.text_color = textColor.value;
+    }
+
     return;
   }
-  const outlineColor = event.target.closest("select[data-outline-color]");
+
+  const outlineColor =
+    event.target.closest("select[data-outline-color]");
+
   if (outlineColor) {
-    const scene = currentScript.scenes[Number(outlineColor.dataset.outlineColor)];
-    if (scene) scene.outline_color = outlineColor.value;
+    const scene =
+      currentScript.scenes[Number(outlineColor.dataset.outlineColor)];
+
+    if (scene) {
+      scene.outline_color = outlineColor.value;
+    }
+
     return;
   }
+
   const bgColor = event.target.closest("select[data-bg-color]");
+
   if (bgColor) {
-    const scene = currentScript.scenes[Number(bgColor.dataset.bgColor)];
-    if (scene) scene.bg_color = bgColor.value;
+    const scene =
+      currentScript.scenes[Number(bgColor.dataset.bgColor)];
+
+    if (scene) {
+      scene.bg_color = bgColor.value;
+    }
+
     return;
   }
+
   const showText = event.target.closest("input[data-show-text]");
+
   if (showText) {
-    const scene = currentScript.scenes[Number(showText.dataset.showText)];
-    if (scene) scene.show_text = showText.checked;
+    const scene =
+      currentScript.scenes[Number(showText.dataset.showText)];
+
+    if (scene) {
+      scene.show_text = showText.checked;
+    }
   }
 });
+
 scenes.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]"); if (!button) return;
+  const button = event.target.closest("button[data-action]");
+
+  if (!button) return;
+
   event.preventDefault();
-  const actions = button.parentElement.querySelectorAll("button[data-action]");
+
+  const actions =
+    button.parentElement.querySelectorAll("button[data-action]");
+
   const approved = button.dataset.action === "approve";
+
   actions.forEach((action) => {
     const selected = action === button;
-    action.classList.toggle("approved", selected && approved);
-    action.classList.toggle("rejected", selected && !approved);
-    action.setAttribute("aria-pressed", String(selected));
-    action.textContent = selected ? (approved ? "Approved" : "Rejected") : (action.dataset.action === "approve" ? "Approve footage" : "Reject candidate");
+
+    action.classList.toggle(
+      "approved",
+      selected && approved
+    );
+
+    action.classList.toggle(
+      "rejected",
+      selected && !approved
+    );
+
+    action.setAttribute(
+      "aria-pressed",
+      String(selected)
+    );
+
+    action.textContent = selected
+      ? (approved ? "Approved" : "Rejected")
+      : (action.dataset.action === "approve"
+          ? "Approve footage"
+          : "Reject candidate");
   });
 });
+
 renderButton.addEventListener("click", async () => {
   const title = document.querySelector("#render-title");
   const status = document.querySelector("#render-status");
-  renderButton.disabled = true; renderButton.textContent = "Rendering…";
+
+  renderButton.disabled = true;
+  renderButton.textContent = "Rendering…";
+
   title.textContent = "Creating your video";
+
   const includeAudio = currentScript.audio_enabled === true;
-  status.textContent = includeAudio ? "Generating voice, fetching footage, and encoding a 1280 × 720 MP4…" : "Skipping audio and encoding a silent 1280 × 720 MP4…";
+
+  status.textContent = includeAudio
+    ? "Generating voice, fetching footage, and encoding a 1280 × 720 MP4…"
+    : "Skipping audio and encoding a silent 1280 × 720 MP4…";
+
   error.textContent = "";
+
   try {
-    if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
-    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, audio_enabled: includeAudio, language: document.querySelector("#language").value }) });
-    if (!response.ok) throw new Error(await readApiError(response, "The renderer could not start."));
-    if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
-    const job = await response.json();
-    let state = { status: "queued" };
-    for (let attempt = 0; attempt < 180; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      const statusResponse = await fetch(apiUrl(job.status_url));
-      if (!statusResponse.ok) {
-          const detail = await statusResponse.text();
-          if (statusResponse.status === 404) throw new Error("The Render worker restarted before this job could be tracked. Start the render again.");
-          throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`);
-        }
-      state = await statusResponse.json();
-      if (state.status === "failed") throw new Error(state.error || "Render failed.");
-      if (state.status === "complete") break;
-      status.textContent = `Rendering video… ${Math.round((attempt + 1) / 180 * 100)}%`;
+    if (!API_BASE && /github\.io$/i.test(window.location.hostname)) {
+      throw new Error(backendUnavailableMessage());
     }
-    if (state.status !== "complete") throw new Error("Render is taking longer than expected. Check the service logs.");
-    const downloadResponse = await fetch(apiUrl(job.download_url));
-    if (!downloadResponse.ok) throw new Error(await downloadResponse.text() || "The video download failed.");
+
+    const response = await fetch(apiUrl("/api/render"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...currentScript,
+        audio_enabled: includeAudio,
+        language: document.querySelector("#language").value
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        await readApiError(
+          response,
+          "The renderer could not start."
+        )
+      );
+    }
+
+    const job = await response.json();
+
+    let state = {
+      status: "queued"
+    };
+
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, 2000)
+      );
+
+      const statusResponse =
+        await fetch(apiUrl(job.status_url));
+
+      if (!statusResponse.ok) {
+        const detail = await statusResponse.text();
+
+        if (statusResponse.status === 404) {
+          throw new Error(
+            "The Render worker restarted before this job could be tracked. Start the render again."
+          );
+        }
+
+        throw new Error(
+          `Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`
+        );
+      }
+
+      state = await statusResponse.json();
+
+      if (state.status === "failed") {
+        throw new Error(state.error || "Render failed.");
+      }
+
+      if (state.status === "complete") {
+        break;
+      }
+
+      status.textContent =
+        `Rendering video… ${Math.round(
+          ((attempt + 1) / 180) * 100
+        )}%`;
+    }
+
+    if (state.status !== "complete") {
+      throw new Error(
+        "Render is taking longer than expected. Check the service logs."
+      );
+    }
+
+    const downloadResponse =
+      await fetch(apiUrl(job.download_url));
+
+    if (!downloadResponse.ok) {
+      throw new Error(
+        await downloadResponse.text() ||
+        "The video download failed."
+      );
+    }
+
     const blob = await downloadResponse.blob();
-    if (renderedVideoUrl) URL.revokeObjectURL(renderedVideoUrl);
+
+    if (renderedVideoUrl) {
+      URL.revokeObjectURL(renderedVideoUrl);
+    }
+
     renderedVideoUrl = URL.createObjectURL(blob);
+
     if (renderVideo && renderPreview && downloadButton) {
       renderVideo.src = renderedVideoUrl;
       renderVideo.load();
+
       renderPreview.hidden = false;
       downloadButton.disabled = false;
+
       downloadButton.onclick = () => {
         const link = document.createElement("a");
         link.href = renderedVideoUrl;
-        link.download = currentScript.project_id + "-landscape.mp4";
+        link.download =
+          currentScript.project_id + "-landscape.mp4";
         link.click();
       };
+
       title.textContent = "Preview ready";
-      status.textContent = "Review the rendered video above, then download it when ready.";
-      renderPreview.scrollIntoView({ behavior: "smooth", block: "start" });
+      status.textContent =
+        "Review the rendered video above, then download it when ready.";
+
+      renderPreview.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
     } else {
       const link = document.createElement("a");
       link.href = renderedVideoUrl;
-      link.download = currentScript.project_id + "-landscape.mp4";
+      link.download =
+        currentScript.project_id + "-landscape.mp4";
       link.click();
+
       title.textContent = "Video created";
-      status.textContent = "Your video has downloaded.";
+      status.textContent =
+        "Your video has downloaded.";
     }
   } catch (err) {
-    title.textContent = "Render failed"; status.textContent = err.message; error.textContent = err.message;
-  } finally { renderButton.disabled = false; renderButton.innerHTML = "Export MP4 <span>→</span>"; }
+    title.textContent = "Render failed";
+    status.textContent = err.message;
+    error.textContent = err.message;
+  } finally {
+    renderButton.disabled = false;
+    renderButton.innerHTML =
+      "Export MP4 <span>→</span>";
+  }
 });
+
 renderScenes(currentScript);
 
 const lineBuilderStyle = document.createElement("style");
+
 lineBuilderStyle.textContent = ".line-builder{border:2px solid #ff00ff;background:#fff;padding:18px;margin-bottom:16px}.line-builder-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;color:#ff00ff;text-transform:uppercase;letter-spacing:.08em}.line-builder-text{font-size:clamp(22px,3vw,38px);line-height:1.08;margin:0 0 18px;color:#111}.line-builder-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.line-builder-grid label{display:grid;gap:6px;color:#111;font-size:12px;text-transform:uppercase;letter-spacing:.06em}.line-builder-grid select,.line-builder-grid input{font:inherit;border:1px solid #ff00ff;padding:9px;background:#fff;color:#111}.line-builder-actions{display:flex;justify-content:space-between;gap:10px;margin-top:18px}.line-builder-actions button{border:1px solid #ff00ff;background:#fff;color:#ff00ff;padding:10px 14px;font:inherit;cursor:pointer}.line-builder-actions button.primary{background:#ff00ff;color:#fff}.line-builder-actions button:disabled{opacity:.45;cursor:not-allowed}.line-builder-status{display:block;margin:14px 0;color:#8a4a7c;font-size:13px}.line-builder-status.error{color:#c40000}.line-builder-complete{display:grid;gap:8px;margin-top:14px}.line-builder-complete article{display:flex;align-items:center;gap:12px;border-top:1px solid #ffd1f5;padding:10px 0;color:#111}.line-builder-complete article strong{color:#ff00ff;min-width:48px}.line-builder-type{display:flex;gap:8px;margin-bottom:16px}.line-builder-type button{flex:1;border:1px solid #ff00ff;background:#fff;color:#ff00ff;padding:10px;cursor:pointer;font:inherit}.line-builder-type button.active{background:#ff00ff;color:#fff}@media(max-width:700px){.line-builder-grid{grid-template-columns:1fr}.line-builder-actions{flex-direction:column}.line-builder-actions button{width:100%}}";
+
 document.head.appendChild(lineBuilderStyle);
-const lineFileInput = document.querySelector("#script-file");
-const lineLoadButton = loadButton.cloneNode(true);
+
+const lineFileInput =
+  document.querySelector("#script-file");
+
+const lineLoadButton =
+  loadButton.cloneNode(true);
+
 loadButton.replaceWith(lineLoadButton);
+
 if (lineFileInput) {
-  const replacementFileInput = lineFileInput.cloneNode(true);
+  const replacementFileInput =
+    lineFileInput.cloneNode(true);
+
   lineFileInput.replaceWith(replacementFileInput);
-  replacementFileInput.addEventListener("change", async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    input.value = await file.text();
-    loadLineByLineScript();
-  });
+
+  replacementFileInput.addEventListener(
+    "change",
+    async (event) => {
+      const file = event.target.files?.[0];
+
+      if (!file) return;
+
+      input.value = await file.text();
+      loadLineByLineScript();
+    }
+  );
 }
-const uploadTitle = document.querySelector(".upload strong");
-const uploadHint = document.querySelector(".upload small");
-if (uploadTitle) uploadTitle.textContent = "Load a script — one line becomes one scene";
-if (uploadHint) uploadHint.textContent = "Choose text, GIF, or video for each line; media searches use the line automatically";
+
+const uploadTitle =
+  document.querySelector(".upload strong");
+
+const uploadHint =
+  document.querySelector(".upload small");
+
+if (uploadTitle) {
+  uploadTitle.textContent =
+    "Load a script — one line becomes one scene";
+}
+
+if (uploadHint) {
+  uploadHint.textContent =
+    "Choose text, GIF, or video for each line; media searches use the line automatically";
+}
+
 input.setAttribute("aria-label", "Script lines");
 input.placeholder = "One script line per scene…";
-input.value = sampleScript.scenes.map((scene) => scene.text).join("\n");
+input.value =
+  sampleScript.scenes
+    .map((scene) => scene.text)
+    .join("\n");
+
 let activeLineIndex = 0;
 let lineFetchToken = 0;
+
 function parseLineByLineScript() {
   const raw = input.value.trim();
-  if (!raw) throw new Error("Add at least one line to your script.");
+
+  if (!raw) {
+    throw new Error("Add at least one line to your script.");
+  }
+
   let parsed;
-  try { parsed = JSON.parse(raw); } catch (parseError) { parsed = null; }
-  if (parsed && !Array.isArray(parsed.scenes)) throw new Error("A JSON script must contain a scenes array, or paste one scene per line.");
-  const sourceScenes = parsed ? parsed.scenes : raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text, index) => ({ scene_id: String(index + 1), text, duration_seconds: 5, scene_type: "text" }));
-  if (!sourceScenes.length) throw new Error("Add at least one line to your script.");
-  const normalizedScenes = sourceScenes.map((scene, index) => {
-    const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
-    if (!normalized.text) throw new Error("Every line needs text.");
-    normalized.scene_type = ["text", "gif", "video"].includes(normalized.scene_type) ? normalized.scene_type : "text";
-    normalized.search_query = normalized.scene_type === "text" ? "" : String(normalized.search_query || normalized.text);
-    normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
-    normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
-    normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
-    normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
-    normalizeColors(normalized);
-    return normalized;
-  });
-  return { project_id: parsed?.project_id || "empire_youtube_channel", scenes: normalizedScenes };
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch (parseError) {
+    parsed = null;
+  }
+
+  if (parsed && !Array.isArray(parsed.scenes)) {
+    throw new Error(
+      "A JSON script must contain a scenes array, or paste one scene per line."
+    );
+  }
+
+  const sourceScenes = parsed
+    ? parsed.scenes
+    : raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((text, index) => ({
+          scene_id: String(index + 1),
+          text,
+          duration_seconds: 5,
+          scene_type: "text"
+        }));
+
+  if (!sourceScenes.length) {
+    throw new Error("Add at least one line to your script.");
+  }
+
+  const normalizedScenes = sourceScenes.map(
+    (scene, index) => {
+      const normalized = {
+        ...scene,
+        scene_id: String(
+          scene.scene_id || index + 1
+        ),
+        text: String(scene.text || "").trim(),
+        duration_seconds:
+          Number(scene.duration_seconds) || 5
+      };
+
+      if (!normalized.text) {
+        throw new Error("Every line needs text.");
+      }
+
+      normalized.scene_type =
+        ["text", "gif", "video"].includes(
+          normalized.scene_type
+        )
+          ? normalized.scene_type
+          : "text";
+
+      normalized.search_query =
+        normalized.scene_type === "text"
+          ? ""
+          : String(
+              normalized.search_query ||
+              normalized.text
+            );
+
+      normalized.pan_region =
+        normalized.pan_region === "bottom_50"
+          ? "bottom_50"
+          : "top_50";
+
+      normalized.pan_direction =
+        normalized.pan_direction === "bottom_to_top"
+          ? "bottom_to_top"
+          : "top_to_bottom";
+
+      normalized.text_position =
+        normalized.text_position === "middle"
+          ? "middle"
+          : "bottom";
+
+      normalized.show_text =
+        normalized.scene_type === "text"
+          ? true
+          : normalized.show_text !== false;
+
+      normalizeColors(normalized);
+
+      return normalized;
+    }
+  );
+
+  return {
+    project_id:
+      parsed?.project_id ||
+      "empire_youtube_channel",
+    scenes: normalizedScenes
+  };
 }
+
 function renderLineBuilder() {
   lineFetchToken += 1;
+
   const requestToken = lineFetchToken;
+
   if (activeLineIndex >= currentScript.scenes.length) {
     renderScenes(currentScript);
-    const review = document.createElement("div");
-    review.className = "line-builder-actions";
-    review.innerHTML = '<button type="button" class="primary">Edit lines</button>';
-    review.querySelector("button").addEventListener("click", () => { activeLineIndex = 0; renderLineBuilder(); });
+
+    const review =
+      document.createElement("div");
+
+    review.className =
+      "line-builder-actions";
+
+    review.innerHTML =
+      '<button type="button" class="primary">Edit lines</button>';
+
+    review
+      .querySelector("button")
+      .addEventListener("click", () => {
+        activeLineIndex = 0;
+        renderLineBuilder();
+      });
+
     scenes.prepend(review);
     return;
   }
-  const scene = currentScript.scenes[activeLineIndex];
+
+  const scene =
+    currentScript.scenes[activeLineIndex];
+
   normalizeColors(scene);
-  const isMedia = scene.scene_type !== "text";
-  const provider = scene.scene_type === "gif" ? "GIPHY" : "Pexels";
+
+  const isMedia =
+    scene.scene_type !== "text";
+
+  const provider =
+    scene.scene_type === "gif"
+      ? "GIPHY"
+      : "Pexels";
+
   scenes.innerHTML = "";
-  const builder = document.createElement("section");
+
+  const builder =
+    document.createElement("section");
+
   builder.className = "line-builder";
-  builder.innerHTML = "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
-  builder.querySelector(".line-builder-head span").textContent = "Line " + (activeLineIndex + 1) + " of " + currentScript.scenes.length;
-  builder.querySelector(".line-builder-text").textContent = scene.text;
-  builder.querySelector('[data-line-type="' + scene.scene_type + '"]').classList.add("active");
-  const grid = builder.querySelector(".line-builder-grid");
-  const searchPanel = builder.querySelector(".line-builder-search");
-  const searchInput = builder.querySelector("[data-media-search]");
-  const searchButton = builder.querySelector("[data-search-media]");
-  searchInput.value = scene.search_query || scene.text;
-  searchButton.textContent = "Search " + provider;
+
+  builder.innerHTML =
+    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
+
+  builder
+    .querySelector(".line-builder-head span")
+    .textContent =
+      "Line " +
+      (activeLineIndex + 1) +
+      " of " +
+      currentScript.scenes.length;
+
+  builder
+    .querySelector(".line-builder-text")
+    .textContent = scene.text;
+
+  builder
+    .querySelector(
+      '[data-line-type="' +
+        scene.scene_type +
+        '"]'
+    )
+    .classList.add("active");
+
+  const grid =
+    builder.querySelector(
+      ".line-builder-grid"
+    );
+
+  const searchPanel =
+    builder.querySelector(
+      ".line-builder-search"
+    );
+
+  const searchInput =
+    builder.querySelector(
+      "[data-media-search]"
+    );
+
+  const searchButton =
+    builder.querySelector(
+      "[data-search-media]"
+    );
+
+  searchInput.value =
+    scene.search_query || scene.text;
+
+  searchButton.textContent =
+    "Search " + provider;
+
   searchPanel.hidden = !isMedia;
+
   if (isMedia) {
-        const panRegionLabel = document.createElement("label");
-    panRegionLabel.textContent = "Pan area";
-    panRegionLabel.innerHTML += '<select data-pan-region="' + activeLineIndex + '"><option value="top_50">Top half</option><option value="bottom_50">Bottom half</option></select>';
-    panRegionLabel.querySelector("select").value = scene.pan_region;
+    const panRegionLabel =
+      document.createElement("label");
+
+    panRegionLabel.textContent =
+      "Pan area";
+
+    panRegionLabel.innerHTML +=
+      '<select data-pan-region="' +
+      activeLineIndex +
+      '"><option value="top_50">Top half</option><option value="bottom_50">Bottom half</option></select>';
+
+    panRegionLabel.querySelector(
+      "select"
+    ).value = scene.pan_region;
+
     grid.appendChild(panRegionLabel);
-    const panDirectionLabel = document.createElement("label");
-    panDirectionLabel.textContent = "Pan motion";
-    panDirectionLabel.innerHTML += '<select data-pan-direction="' + activeLineIndex + '"><option value="top_to_bottom">Top → bottom</option><option value="bottom_to_top">Bottom → top</option></select>';
-    panDirectionLabel.querySelector("select").value = scene.pan_direction;
+
+    const panDirectionLabel =
+      document.createElement("label");
+
+    panDirectionLabel.textContent =
+      "Pan motion";
+
+    panDirectionLabel.innerHTML +=
+      '<select data-pan-direction="' +
+      activeLineIndex +
+      '"><option value="top_to_bottom">Top → bottom</option><option value="bottom_to_top">Bottom → top</option></select>';
+
+    panDirectionLabel.querySelector(
+      "select"
+    ).value = scene.pan_direction;
+
     grid.appendChild(panDirectionLabel);
-    const showTextLabel = document.createElement("label");
-    showTextLabel.className = "scene-control scene-control-checkbox";
-    showTextLabel.innerHTML = '<input type="checkbox" data-show-text="' + activeLineIndex + '"> Show text overlay';
-    showTextLabel.querySelector("input").checked = scene.show_text !== false;
+
+    const showTextLabel =
+      document.createElement("label");
+
+    showTextLabel.className =
+      "scene-control scene-control-checkbox";
+
+    showTextLabel.innerHTML =
+      '<input type="checkbox" data-show-text="' +
+      activeLineIndex +
+      '"> Show text overlay';
+
+    showTextLabel.querySelector(
+      "input"
+    ).checked = scene.show_text !== false;
+
     grid.appendChild(showTextLabel);
   }
-  const textPositionLabel = document.createElement("label");
-  textPositionLabel.textContent = "Text position";
-  textPositionLabel.innerHTML += '<select data-text-position="' + activeLineIndex + '"><option value="bottom">Bottom</option><option value="middle">Middle</option></select>';
-  textPositionLabel.querySelector("select").value = scene.text_position;
+
+  const textPositionLabel =
+    document.createElement("label");
+
+  textPositionLabel.textContent =
+    "Text position";
+
+  textPositionLabel.innerHTML +=
+    '<select data-text-position="' +
+    activeLineIndex +
+    '"><option value="bottom">Bottom</option><option value="middle">Middle</option></select>';
+
+  textPositionLabel.querySelector(
+    "select"
+  ).value = scene.text_position;
+
   grid.appendChild(textPositionLabel);
-  const durationLabel = document.createElement("label");
-  durationLabel.textContent = "Duration (mm:ss)";
-  durationLabel.innerHTML += '<input type="text" data-duration="' + activeLineIndex + '" />';
-  durationLabel.querySelector("input").value = formatDuration(scene.duration_seconds);
+
+  const durationLabel =
+    document.createElement("label");
+
+  durationLabel.textContent =
+    "Duration (mm:ss)";
+
+  durationLabel.innerHTML +=
+    '<input type="text" data-duration="' +
+    activeLineIndex +
+    '" />';
+
+  durationLabel.querySelector(
+    "input"
+  ).value =
+    formatDuration(
+      scene.duration_seconds
+    );
+
   grid.appendChild(durationLabel);
-  const textColorLabel = document.createElement("label");
-  textColorLabel.textContent = "Text color";
-  textColorLabel.innerHTML += colorSelectHtml("text-color", activeLineIndex, scene.text_color);
+
+  const textColorLabel =
+    document.createElement("label");
+
+  textColorLabel.textContent =
+    "Text color";
+
+  textColorLabel.innerHTML +=
+    colorSelectHtml(
+      "text-color",
+      activeLineIndex,
+      scene.text_color
+    );
+
   grid.appendChild(textColorLabel);
-  const outlineColorLabel = document.createElement("label");
-  outlineColorLabel.textContent = "Outline color";
-  outlineColorLabel.innerHTML += colorSelectHtml("outline-color", activeLineIndex, scene.outline_color);
+
+  const outlineColorLabel =
+    document.createElement("label");
+
+  outlineColorLabel.textContent =
+    "Outline color";
+
+  outlineColorLabel.innerHTML +=
+    colorSelectHtml(
+      "outline-color",
+      activeLineIndex,
+      scene.outline_color
+    );
+
   grid.appendChild(outlineColorLabel);
+
   if (!isMedia) {
-    const bgColorLabel = document.createElement("label");
-    bgColorLabel.textContent = "Background color";
-    bgColorLabel.innerHTML += colorSelectHtml("bg-color", activeLineIndex, scene.bg_color);
+    const bgColorLabel =
+      document.createElement("label");
+
+    bgColorLabel.textContent =
+      "Background color";
+
+    bgColorLabel.innerHTML +=
+      colorSelectHtml(
+        "bg-color",
+        activeLineIndex,
+        scene.bg_color
+      );
+
     grid.appendChild(bgColorLabel);
   }
-  const status = builder.querySelector(".line-builder-status");
-  const nextButton = builder.querySelector("[data-line-next]");
-  const previousButton = builder.querySelector("[data-line-prev]");
-  const syncNextButton = () => { nextButton.disabled = isMedia && !(scene.selected_video && scene.selected_video.video_files); };
+
+  const status =
+    builder.querySelector(
+      ".line-builder-status"
+    );
+
+  const nextButton =
+    builder.querySelector(
+      "[data-line-next]"
+    );
+
+  const previousButton =
+    builder.querySelector(
+      "[data-line-prev]"
+    );
+
+  const syncNextButton = () => {
+    nextButton.disabled =
+      isMedia &&
+      !(
+        scene.selected_video &&
+        scene.selected_video.video_files
+      );
+  };
+
   searchButton.disabled = isMedia;
-  builder.querySelectorAll("[data-line-type]").forEach((button) => button.addEventListener("click", () => {
-    scene.scene_type = button.dataset.lineType;
-    if (scene.scene_type !== "text") scene.search_query = scene.text;
-    else { scene.search_query = ""; delete scene.selected_video; }
-    renderLineBuilder();
-  }));
+
+  builder
+    .querySelectorAll("[data-line-type]")
+    .forEach((button) =>
+      button.addEventListener(
+        "click",
+        () => {
+          scene.scene_type =
+            button.dataset.lineType;
+
+          if (scene.scene_type !== "text") {
+            scene.search_query =
+              scene.text;
+          } else {
+            scene.search_query = "";
+            delete scene.selected_video;
+          }
+
+          renderLineBuilder();
+        }
+      )
+    );
+
   const searchMedia = async () => {
-    const query = searchInput.value.trim();
-    if (!query) { status.textContent = "Enter a keyword to search."; status.classList.add("error"); return; }
+    const query =
+      searchInput.value.trim();
+
+    if (!query) {
+      status.textContent =
+        "Enter a keyword to search.";
+
+      status.classList.add("error");
+      return;
+    }
+
     scene.search_query = query;
+
     delete scene.selected_video;
+
     searchButton.disabled = true;
     nextButton.disabled = true;
+
     status.classList.remove("error");
-    status.textContent = "Searching " + provider + " for “" + query + "”…";
+
+    status.textContent =
+      "Searching " +
+      provider +
+      " for “" +
+      query +
+      "”…";
+
     try {
-      const data = await loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, false);
-      if (requestToken !== lineFetchToken) return;
-      const candidates = data.scenes[0]?.candidates || [];
-      status.textContent = candidates.length ? "Select a " + provider + " clip below, then continue." : "No " + provider + " results found. Try another keyword.";
+      const data =
+        await loadFootagePreviews(
+          {
+            project_id:
+              currentScript.project_id,
+            scenes: [scene]
+          },
+          false
+        );
+
+      if (requestToken !== lineFetchToken) {
+        return;
+      }
+
+      const candidates =
+        data.scenes[0]?.candidates || [];
+
+      status.textContent =
+        candidates.length
+          ? "Select a " +
+            provider +
+            " clip below, then continue."
+          : "No " +
+            provider +
+            " results found. Try another keyword.";
     } catch (err) {
       status.classList.add("error");
-      status.textContent = err instanceof Error ? err.message : backendUnavailableMessage();
+
+      status.textContent =
+        err instanceof Error
+          ? err.message
+          : backendUnavailableMessage();
     } finally {
-      if (requestToken === lineFetchToken) { searchButton.disabled = false; syncNextButton(); }
+      if (requestToken === lineFetchToken) {
+        searchButton.disabled = false;
+        syncNextButton();
+      }
     }
   };
-  searchButton.addEventListener("click", searchMedia);
-  searchInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); searchMedia(); } });
-  previousButton.disabled = activeLineIndex === 0;
-  previousButton.addEventListener("click", () => { if (activeLineIndex > 0) { activeLineIndex -= 1; renderLineBuilder(); } });
-  nextButton.textContent = activeLineIndex === currentScript.scenes.length - 1 ? "Finish scene setup ✓" : "Next line →";
-  nextButton.addEventListener("click", () => { activeLineIndex += 1; renderLineBuilder(); });
+
+  searchButton.addEventListener(
+    "click",
+    searchMedia
+  );
+
+  searchInput.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        searchMedia();
+      }
+    }
+  );
+
+  previousButton.disabled =
+    activeLineIndex === 0;
+
+  previousButton.addEventListener(
+    "click",
+    () => {
+      if (activeLineIndex > 0) {
+        activeLineIndex -= 1;
+        renderLineBuilder();
+      }
+    }
+  );
+
+  nextButton.textContent =
+    activeLineIndex ===
+    currentScript.scenes.length - 1
+      ? "Finish scene setup ✓"
+      : "Next line →";
+
+  nextButton.addEventListener(
+    "click",
+    () => {
+      activeLineIndex += 1;
+      renderLineBuilder();
+    }
+  );
+
   scenes.appendChild(builder);
+
   if (!isMedia) {
-    status.textContent = "Text scene ready. Choose its position, then continue.";
+    status.textContent =
+      "Text scene ready. Choose its position, then continue.";
+
     syncNextButton();
     return;
   }
+
   syncNextButton();
-  status.textContent = `Searching ${scene.scene_type === "gif" ? "GIPHY" : "Pexels"} for this line automatically…`;
-  loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, true).then((data) => {
-    if (requestToken !== lineFetchToken) return;
-    const footageLabel = builder.querySelector(".footage-previews small");
-    if (footageLabel) footageLabel.textContent = "Select a " + provider + " clip for this line:";
-    searchButton.disabled = false;
-    const candidates = data.scenes[0]?.candidates || [];
-    status.textContent = candidates.length ? "Select a " + provider + " clip below, then continue to the next line." : "No " + provider + " results found. Try another keyword.";
-    syncNextButton();
-  }).catch((err) => {
-    if (requestToken !== lineFetchToken) return;
-    status.classList.add("error");
-    status.textContent = err instanceof Error ? err.message : backendUnavailableMessage();
-    searchButton.disabled = false;
-    nextButton.disabled = true;
-  });
+
+  status.textContent =
+    `Searching ${
+      scene.scene_type === "gif"
+        ? "GIPHY"
+        : "Pexels"
+    } for this line automatically…`;
+
+  loadFootagePreviews(
+    {
+      project_id:
+        currentScript.project_id,
+      scenes: [scene]
+    },
+    true
+  )
+    .then((data) => {
+      if (requestToken !== lineFetchToken) {
+        return;
+      }
+
+      const footageLabel =
+        builder.querySelector(
+          ".footage-previews small"
+        );
+
+      if (footageLabel) {
+        footageLabel.textContent =
+          "Select a " +
+          provider +
+          " clip for this line:";
+      }
+
+      searchButton.disabled = false;
+
+      const candidates =
+        data.scenes[0]?.candidates || [];
+
+      status.textContent =
+        candidates.length
+          ? "Select a " +
+            provider +
+            " clip below, then continue to the next line."
+          : "No " +
+            provider +
+            " results found. Try another keyword.";
+
+      syncNextButton();
+    })
+    .catch((err) => {
+      if (requestToken !== lineFetchToken) {
+        return;
+      }
+
+      status.classList.add("error");
+
+      status.textContent =
+        err instanceof Error
+          ? err.message
+          : backendUnavailableMessage();
+
+      searchButton.disabled = false;
+      nextButton.disabled = true;
+    });
 }
-lineLoadButton.innerHTML = "Load script <span>→</span>";
-lineLoadButton.addEventListener("click", () => {
-  try {
-    currentScript = parseLineByLineScript();
-    activeLineIndex = 0;
-    error.textContent = "";
-    renderLineBuilder();
-  } catch (err) {
-    error.textContent = err instanceof Error ? err.message : "Could not load that script.";
+
+lineLoadButton.innerHTML =
+  "Load script <span>→</span>";
+
+lineLoadButton.addEventListener(
+  "click",
+  () => {
+    try {
+      currentScript =
+        parseLineByLineScript();
+
+      activeLineIndex = 0;
+      error.textContent = "";
+
+      renderLineBuilder();
+    } catch (err) {
+      error.textContent =
+        err instanceof Error
+          ? err.message
+          : "Could not load that script.";
+    }
   }
-});
-scenes.addEventListener("click", (event) => {
-  if (!event.target.closest(".footage-choice")) return;
-  window.setTimeout(() => {
-    const active = currentScript.scenes[activeLineIndex];
-    const next = scenes.querySelector("[data-line-next]");
-    if (active && next) next.disabled = active.scene_type !== "text" && !(active.selected_video && active.selected_video.video_files);
-  }, 0);
-});
+);
+
+scenes.addEventListener(
+  "click",
+  (event) => {
+    if (
+      !event.target.closest(
+        ".footage-choice"
+      )
+    ) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      const active =
+        currentScript.scenes[
+          activeLineIndex
+        ];
+
+      const next =
+        scenes.querySelector(
+          "[data-line-next]"
+        );
+
+      if (active && next) {
+        next.disabled =
+          active.scene_type !== "text" &&
+          !(
+            active.selected_video &&
+            active.selected_video.video_files
+          );
+      }
+    }, 0);
+  }
+);
+
 renderLineBuilder();
+```
