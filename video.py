@@ -45,12 +45,23 @@ def wrap_caption(text: str) -> str:
     )
 
 
-def _caption_file(text: str) -> Path:
-    handle, path = tempfile.mkstemp(prefix="empire_caption_", suffix=".txt")
-    os.close(handle)
-    caption_path = Path(path)
-    caption_path.write_text(wrap_caption(text), encoding="utf-8")
-    return caption_path
+def caption_filter(
+    caption_path: Path,
+    text_position: str = VIDEO_TEXT_POSITION,
+    text_color: str = "#ff00ff",
+    outline_color: str = "#ffffff",
+) -> str:
+    if text_position not in {"middle", "bottom"}:
+        raise FFmpegError('TEXT_POSITION must be "middle" or "bottom".')
+    path = caption_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
+    font = ":".join(_font_args())
+    prefix = f"{font}:" if font else ""
+    y_position = "(h-text_h)/2" if text_position == "middle" else "h*0.72"
+    return (
+        f"drawtext={prefix}textfile='{path}':"
+        f"fontcolor={text_color}:fontsize=52:borderw=4:bordercolor={outline_color}:"
+        f"x=(w-text_w)/2:y={y_position}:line_spacing=12"
+    )
 
 
 def caption_filter(caption_path: Path, text_position: str = VIDEO_TEXT_POSITION) -> str:
