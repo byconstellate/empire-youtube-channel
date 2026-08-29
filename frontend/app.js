@@ -82,9 +82,12 @@ async function loadFootagePreviews(script, expand = false) {
     const article = [...scenes.querySelectorAll(".scene")].find((item) => item.dataset.scene === String(script.scenes.indexOf(scene)));
     const target = article?.querySelector(".scene-copy") || scenes.querySelector(".line-builder");
     if (!scene || !target) return;
+    const existing = target.querySelector(".footage-previews");
+    if (existing) existing.remove();
     const box = document.createElement("div"); box.className = "footage-previews";
     const providerName = scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video";
     const label = document.createElement("small"); label.textContent = `Select a ${providerName} for this line:`; box.appendChild(label);
+    if (!preview.candidates.length) { const empty = document.createElement("span"); empty.className = "footage-empty"; empty.textContent = "No results for this search."; box.appendChild(empty); }
     preview.candidates.forEach((candidate, index) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "footage-choice";
       const video = document.createElement("video"); video.src = candidate.preview_url; video.controls = true; video.muted = true; video.preload = "metadata"; video.title = `Preview ${providerName} candidate ${index + 1}`; button.appendChild(video);
@@ -96,6 +99,7 @@ async function loadFootagePreviews(script, expand = false) {
     });
     target.appendChild(box);
   });
+  return data;
 }
 async function loadScript() {
   try {
@@ -266,11 +270,17 @@ function renderLineBuilder() {
   scenes.innerHTML = "";
   const builder = document.createElement("section");
   builder.className = "line-builder";
-  builder.innerHTML = '<div class="line-builder-head"><strong>Scene setup</strong><span></span></div><p class="line-builder-text"></p><div class="line-builder-type"><button type="button" data-line-type="text">Text</button><button type="button" data-line-type="gif">GIF</button><button type="button" data-line-type="video">Video</button></div><div class="line-builder-grid"></div><span class="line-builder-status">Choose Text, GIF, or Video for this line.</span><div class="line-builder-actions"><button type="button" data-line-prev>← Previous line</button><button type="button" class="primary" data-line-next>Next line →</button></div>';
+  builder.innerHTML = "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
   builder.querySelector(".line-builder-head span").textContent = "Line " + (activeLineIndex + 1) + " of " + currentScript.scenes.length;
   builder.querySelector(".line-builder-text").textContent = scene.text;
   builder.querySelector('[data-line-type="' + scene.scene_type + '"]').classList.add("active");
   const grid = builder.querySelector(".line-builder-grid");
+  const searchPanel = builder.querySelector(".line-builder-search");
+  const searchInput = builder.querySelector("[data-media-search]");
+  const searchButton = builder.querySelector("[data-search-media]");
+  searchInput.value = scene.search_query || scene.text;
+  searchButton.textContent = "Search " + provider;
+  searchPanel.hidden = !isMedia;
   if (isMedia) {
         const panRegionLabel = document.createElement("label");
     panRegionLabel.textContent = "Pan area";
@@ -292,12 +302,36 @@ function renderLineBuilder() {
   const nextButton = builder.querySelector("[data-line-next]");
   const previousButton = builder.querySelector("[data-line-prev]");
   const syncNextButton = () => { nextButton.disabled = isMedia && !(scene.selected_video && scene.selected_video.video_files); };
+  searchButton.disabled = isMedia;
   builder.querySelectorAll("[data-line-type]").forEach((button) => button.addEventListener("click", () => {
     scene.scene_type = button.dataset.lineType;
     if (scene.scene_type !== "text") scene.search_query = scene.text;
     else { scene.search_query = ""; delete scene.selected_video; }
     renderLineBuilder();
   }));
+  const searchMedia = async () => {
+    const query = searchInput.value.trim();
+    if (!query) { status.textContent = "Enter a keyword to search."; status.classList.add("error"); return; }
+    scene.search_query = query;
+    delete scene.selected_video;
+    searchButton.disabled = true;
+    nextButton.disabled = true;
+    status.classList.remove("error");
+    status.textContent = "Searching " + provider + " for “" + query + "”…";
+    try {
+      const data = await loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, false);
+      if (requestToken !== lineFetchToken) return;
+      const candidates = data.scenes[0]?.candidates || [];
+      status.textContent = candidates.length ? "Select a " + provider + " clip below, then continue." : "No " + provider + " results found. Try another keyword.";
+    } catch (err) {
+      status.classList.add("error");
+      status.textContent = err instanceof Error ? err.message : backendUnavailableMessage();
+    } finally {
+      if (requestToken === lineFetchToken) { searchButton.disabled = false; syncNextButton(); }
+    }
+  };
+  searchButton.addEventListener("click", searchMedia);
+  searchInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); searchMedia(); } });
   previousButton.disabled = activeLineIndex === 0;
   previousButton.addEventListener("click", () => { if (activeLineIndex > 0) { activeLineIndex -= 1; renderLineBuilder(); } });
   nextButton.textContent = activeLineIndex === currentScript.scenes.length - 1 ? "Finish scene setup ✓" : "Next line →";
@@ -310,17 +344,20 @@ function renderLineBuilder() {
   }
   syncNextButton();
   status.textContent = `Searching ${scene.scene_type === "gif" ? "GIPHY" : "Pexels"} for this line automatically…`;
-  loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, true).then(() => {
+  loadFootagePreviews({ project_id: currentScript.project_id, scenes: [scene] }, true).then((data) => {
     if (requestToken !== lineFetchToken) return;
     const footageLabel = builder.querySelector(".footage-previews small");
-    if (footageLabel) footageLabel.textContent = "Select a GIPHY clip for this line:";
-    status.textContent = `Select a ${scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video"} below, then continue to the next line.`;
+    if (footageLabel) footageLabel.textContent = "Select a " + provider + " clip for this line:";
+    searchButton.disabled = false;
+    const candidates = data.scenes[0]?.candidates || [];
+    status.textContent = candidates.length ? "Select a " + provider + " clip below, then continue to the next line." : "No " + provider + " results found. Try another keyword.";
     syncNextButton();
   }).catch((err) => {
     if (requestToken !== lineFetchToken) return;
     status.classList.add("error");
     status.textContent = err instanceof Error ? err.message : backendUnavailableMessage();
-    nextButton.disabled = false;
+    searchButton.disabled = false;
+    nextButton.disabled = true;
   });
 }
 lineLoadButton.innerHTML = "Load script <span>→</span>";
