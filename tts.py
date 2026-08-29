@@ -38,6 +38,12 @@ def _load_model():
             return _model
         try:
             import torch
+            thread_count = int(os.getenv("TORCH_NUM_THREADS", "1"))
+            torch.set_num_threads(thread_count)
+            try:
+                torch.set_num_interop_threads(thread_count)
+            except RuntimeError:
+                pass
             from chatterbox.tts_turbo import ChatterboxTurboTTS
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
