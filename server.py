@@ -15,60 +15,60 @@ from giphy import GiphyError, search_gifs
 from pexels import PexelsError, search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
-    jobs = {}
-    jobs_lock = threading.Lock()
-    JOB_DIR = Path(os.getenv("RENDER_JOB_DIR", "projects/.render_jobs"))
-    JOB_DIR.mkdir(parents=True, exist_ok=True)
+jobs = {}
+jobs_lock = threading.Lock()
+JOB_DIR = Path(os.getenv("RENDER_JOB_DIR", "projects/.render_jobs"))
+JOB_DIR.mkdir(parents=True, exist_ok=True)
 
 
-    def _job_path(job_id: str) -> Path:
-      return JOB_DIR / f"{job_id}.json"
+def _job_path(job_id: str) -> Path:
+  return JOB_DIR / f"{job_id}.json"
 
 
-    def _persist_job(job_id: str, job: dict) -> None:
-      JOB_DIR.mkdir(parents=True, exist_ok=True)
-      target = _job_path(job_id)
-      temporary = target.with_suffix(".tmp")
-      temporary.write_text(json.dumps(job), encoding="utf-8")
-      temporary.replace(target)
+def _persist_job(job_id: str, job: dict) -> None:
+  JOB_DIR.mkdir(parents=True, exist_ok=True)
+  target = _job_path(job_id)
+  temporary = target.with_suffix(".tmp")
+  temporary.write_text(json.dumps(job), encoding="utf-8")
+  temporary.replace(target)
 
 
-    def set_job(job_id: str, **updates: str) -> dict:
+def set_job(job_id: str, **updates: str) -> dict:
+  with jobs_lock:
+      job = {**jobs.get(job_id, {}), **updates}
+      jobs[job_id] = job
+      _persist_job(job_id, job)
+      return dict(job)
+
+
+def get_job(job_id: str) -> dict | None:
+  try:
+      return json.loads(_job_path(job_id).read_text(encoding="utf-8"))
+  except (FileNotFoundError, OSError, json.JSONDecodeError):
       with jobs_lock:
-          job = {**jobs.get(job_id, {}), **updates}
-          jobs[job_id] = job
-          _persist_job(job_id, job)
-          return dict(job)
+          job = jobs.get(job_id)
+      return dict(job) if job else None
 
 
-    def get_job(job_id: str) -> dict | None:
+def recover_interrupted_jobs() -> None:
+  for job_path in JOB_DIR.glob("*.json"):
       try:
-          return json.loads(_job_path(job_id).read_text(encoding="utf-8"))
-      except (FileNotFoundError, OSError, json.JSONDecodeError):
-          with jobs_lock:
-              job = jobs.get(job_id)
-          return dict(job) if job else None
-
-
-    def recover_interrupted_jobs() -> None:
-      for job_path in JOB_DIR.glob("*.json"):
+          job = json.loads(job_path.read_text(encoding="utf-8"))
+      except (OSError, json.JSONDecodeError):
+          continue
+      if job.get("status") in {"queued", "running"}:
+          job["status"] = "failed"
+          job["error"] = "Render worker restarted before this job completed. Start a new render."
           try:
-              job = json.loads(job_path.read_text(encoding="utf-8"))
-          except (OSError, json.JSONDecodeError):
+              job_path.write_text(json.dumps(job), encoding="utf-8")
+          except OSError:
               continue
-          if job.get("status") in {"queued", "running"}:
-              job["status"] = "failed"
-              job["error"] = "Render worker restarted before this job completed. Start a new render."
-              try:
-                  job_path.write_text(json.dumps(job), encoding="utf-8")
-              except OSError:
-                  continue
 
 
-    recover_interrupted_jobs()
+recover_interrupted_jobs()
 
 
-    @app.after_request
+@app.after_request
 def add_cors_headers(response):
   origin = request.headers.get("Origin")
   allowed_origin = os.getenv("FRONTEND_ORIGIN", "*")
@@ -189,8 +189,7 @@ def render_status(job_id: str):
 
 @app.get("/api/render/<job_id>/download")
 def render_download(job_id: str):
-  with jobs_lock:
-      job = jobs.get(job_id)
+  job = get_job(job_id)
   if not job:
       return jsonify(error="Render job not found."), 404
   if job.get("status") != "complete":
