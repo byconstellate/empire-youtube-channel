@@ -102,7 +102,7 @@ def footage_filter(
 
 def create_video_scene(
     footage: Path,
-    audio: Path,
+    audio: Path | None,
     text: str,
     duration: float,
     output: Path,
@@ -116,14 +116,11 @@ def create_video_scene(
         video_filter = (
             footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position)
         )
-        run_ffmpeg(
+        ffmpeg_args = ["-stream_loop", "-1", "-i", str(footage)]
+        if audio is not None:
+            ffmpeg_args.extend(["-i", str(audio)])
+        ffmpeg_args.extend(
             [
-                "-stream_loop",
-                "-1",
-                "-i",
-                str(footage),
-                "-i",
-                str(audio),
                 "-t",
                 str(duration),
                 "-vf",
@@ -132,10 +129,24 @@ def create_video_scene(
                 str(VIDEO_FPS),
                 "-map",
                 "0:v:0",
-                "-map",
-                "1:a:0",
-                "-af",
-                f"apad=whole_dur={duration}",
+            ]
+        )
+        if audio is not None:
+            ffmpeg_args.extend(
+                [
+                    "-map",
+                    "1:a:0",
+                    "-af",
+                    f"apad=whole_dur={duration}",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                ]
+            )
+        else:
+            ffmpeg_args.append("-an")
+        ffmpeg_args.extend(
+            [
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -144,40 +155,45 @@ def create_video_scene(
                 "28",
                 "-pix_fmt",
                 "yuv420p",
-                "-c:a",
-                "aac",
-                "-shortest",
                 str(output),
             ]
         )
+        run_ffmpeg(ffmpeg_args)
 
 
 
     finally:
         if caption_path is not None:
             caption_path.unlink(missing_ok=True)
-def create_text_scene(audio: Path, text: str, duration: float, background: str, output: Path, text_position: str = VIDEO_TEXT_POSITION) -> None:
+def create_text_scene(audio: Path | None, text: str, duration: float, background: str, output: Path, text_position: str = VIDEO_TEXT_POSITION) -> None:
     caption_path = _caption_file(text)
     try:
         video_filter = caption_filter(caption_path, text_position)
-        run_ffmpeg(
+        ffmpeg_args = [
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c={background}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:r={VIDEO_FPS}",
+        ]
+        if audio is not None:
+            ffmpeg_args.extend(["-i", str(audio)])
+        ffmpeg_args.extend(["-t", str(duration), "-vf", video_filter, "-map", "0:v:0"])
+        if audio is not None:
+            ffmpeg_args.extend(
+                [
+                    "-map",
+                    "1:a:0",
+                    "-af",
+                    f"apad=whole_dur={duration}",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                ]
+            )
+        else:
+            ffmpeg_args.append("-an")
+        ffmpeg_args.extend(
             [
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c={background}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:r={VIDEO_FPS}",
-                "-i",
-                str(audio),
-                "-t",
-                str(duration),
-                "-vf",
-                video_filter,
-                "-map",
-                "0:v:0",
-                "-map",
-                "1:a:0",
-                "-af",
-                f"apad=whole_dur={duration}",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -186,12 +202,10 @@ def create_text_scene(audio: Path, text: str, duration: float, background: str, 
                 "28",
                 "-pix_fmt",
                 "yuv420p",
-                "-c:a",
-                "aac",
-                "-shortest",
                 str(output),
             ]
         )
+        run_ffmpeg(ffmpeg_args)
 
 
 
