@@ -9,6 +9,10 @@ from pathlib import Path
 
 from config import FONT_FILE, VIDEO_FPS, VIDEO_HEIGHT, VIDEO_PAN_DIRECTION, VIDEO_PAN_REGION, VIDEO_TEXT_POSITION, VIDEO_WIDTH
 
+DEFAULT_TEXT_COLOR = "#ff00ff"
+DEFAULT_OUTLINE_COLOR = "#ffffff"
+DEFAULT_BG_COLOR = "#000000"
+
 
 class FFmpegError(RuntimeError):
     pass
@@ -45,11 +49,19 @@ def wrap_caption(text: str) -> str:
     )
 
 
+def _caption_file(text: str) -> Path:
+    handle, path = tempfile.mkstemp(prefix="empire_caption_", suffix=".txt")
+    os.close(handle)
+    caption_path = Path(path)
+    caption_path.write_text(wrap_caption(text), encoding="utf-8")
+    return caption_path
+
+
 def caption_filter(
     caption_path: Path,
     text_position: str = VIDEO_TEXT_POSITION,
-    text_color: str = "#ff00ff",
-    outline_color: str = "#ffffff",
+    text_color: str = DEFAULT_TEXT_COLOR,
+    outline_color: str = DEFAULT_OUTLINE_COLOR,
 ) -> str:
     if text_position not in {"middle", "bottom"}:
         raise FFmpegError('TEXT_POSITION must be "middle" or "bottom".')
@@ -64,19 +76,6 @@ def caption_filter(
     )
 
 
-def caption_filter(caption_path: Path, text_position: str = VIDEO_TEXT_POSITION) -> str:
-    if text_position not in {"middle", "bottom"}:
-        raise FFmpegError('TEXT_POSITION must be "middle" or "bottom".')
-    path = caption_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
-    font = ":".join(_font_args())
-    prefix = f"{font}:" if font else ""
-    y_position = "(h-text_h)/2" if text_position == "middle" else "h*0.72"
-    return (
-        f"drawtext={prefix}textfile='{path}':"
-        "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
-        f"x=(w-text_w)/2:y={y_position}:line_spacing=12:text_align=center"
-    )
-
 def footage_filter(
     text: str,
     duration: float,
@@ -84,6 +83,8 @@ def footage_filter(
     pan_region: str = VIDEO_PAN_REGION,
     caption_path: Path | None = None,
     text_position: str = VIDEO_TEXT_POSITION,
+    text_color: str = DEFAULT_TEXT_COLOR,
+    outline_color: str = DEFAULT_OUTLINE_COLOR,
 ) -> str:
     """Scale footage and pan within the selected top or bottom half.
 
@@ -108,7 +109,7 @@ def footage_filter(
     )
     if caption_path is None:
         return base
-    return f"{base},{caption_filter(caption_path, text_position)}"
+    return f"{base},{caption_filter(caption_path, text_position, text_color, outline_color)}"
 
 
 def create_video_scene(
@@ -121,11 +122,13 @@ def create_video_scene(
     pan_region: str = VIDEO_PAN_REGION,
     text_position: str = VIDEO_TEXT_POSITION,
     show_text: bool = True,
+    text_color: str = DEFAULT_TEXT_COLOR,
+    outline_color: str = DEFAULT_OUTLINE_COLOR,
 ) -> None:
     caption_path = _caption_file(text) if show_text else None
     try:
         video_filter = (
-            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position)
+            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position, text_color, outline_color)
         )
         ffmpeg_args = ["-stream_loop", "-1", "-i", str(footage)]
         if audio is not None:
@@ -170,16 +173,24 @@ def create_video_scene(
             ]
         )
         run_ffmpeg(ffmpeg_args)
-
-
-
     finally:
         if caption_path is not None:
             caption_path.unlink(missing_ok=True)
-def create_text_scene(audio: Path | None, text: str, duration: float, background: str, output: Path, text_position: str = VIDEO_TEXT_POSITION) -> None:
+
+
+def create_text_scene(
+    audio: Path | None,
+    text: str,
+    duration: float,
+    background: str,
+    output: Path,
+    text_position: str = VIDEO_TEXT_POSITION,
+    text_color: str = DEFAULT_TEXT_COLOR,
+    outline_color: str = DEFAULT_OUTLINE_COLOR,
+) -> None:
     caption_path = _caption_file(text)
     try:
-        video_filter = caption_filter(caption_path, text_position)
+        video_filter = caption_filter(caption_path, text_position, text_color, outline_color)
         ffmpeg_args = [
             "-f",
             "lavfi",
@@ -217,11 +228,10 @@ def create_text_scene(audio: Path | None, text: str, duration: float, background
             ]
         )
         run_ffmpeg(ffmpeg_args)
-
-
-
     finally:
         caption_path.unlink(missing_ok=True)
+
+
 def combine_scenes(scene_paths: list[Path], output: Path, work_dir: Path) -> None:
     concat_file = work_dir / "concat.txt"
     concat_file.write_text(
