@@ -16,7 +16,7 @@ from config import (
 )
 from giphy import GiphyError, search_gifs
 from pexels import PexelsError, choose_video, download_video, search_videos
-from tts import TTSError, generate_voice
+from tts import TTSError, generate_voice, unload_model
 from video import FFmpegError, combine_scenes, create_text_scene, create_video_scene, ensure_ffmpeg
 
 
@@ -81,14 +81,29 @@ def process(script: dict) -> Path:
     for directory in (footage_dir, audio_dir, scenes_dir, output_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
+    # Pass 1: generate every scene's narration first, while the Pocket TTS model
+    # is loaded. Doing this up front (instead of interleaved with ffmpeg encoding)
+    # means we can fully unload the model before the memory-heavy video work
+    # starts, so the two never compete for RAM at the same time.
+    audio_paths: dict[str, Path] = {}
+    for scene in script["scenes"]:
+        scene_id = str(scene["scene_id"])
+        audio_path = audio_dir / f"scene_{scene_id}.mp3"
+        print(f"\nGenerating voice for scene {scene_id}...")
+        generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
+        audio_paths[scene_id] = audio_path
+
+    print("\nReleasing the voice model before encoding video...")
+    unload_model()
+
+    # Pass 2: download footage and run ffmpeg for each scene, now that the
+    # torch model's memory has been freed.
     scene_paths: list[Path] = []
     for index, scene in enumerate(script["scenes"]):
         scene_id = str(scene["scene_id"])
         duration = float(scene["duration_seconds"])
-        audio_path = audio_dir / f"scene_{scene_id}.mp3"
+        audio_path = audio_paths[scene_id]
         scene_path = scenes_dir / f"scene_{scene_id}.mp4"
-        print(f"\nGenerating voice for scene {scene_id}...")
-        generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
 
         if scene["scene_type"] in {"video", "gif"}:
             selected_video = scene.get("selected_video")

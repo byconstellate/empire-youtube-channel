@@ -43,14 +43,42 @@ def _load_model_and_voice():
         if _model is not None and _voice_state is not None:
             return _model, _voice_state
         try:
+            import torch
             from pocket_tts import TTSModel
 
+            thread_count = int(os.getenv("TORCH_NUM_THREADS", "1"))
+            torch.set_num_threads(thread_count)
+            try:
+                torch.set_num_interop_threads(thread_count)
+            except RuntimeError:
+                pass
+
             reference = _reference_voice_path()
-            _model = TTSModel.load_model()
+            # quantize=True applies dynamic int8 quantization to the transformer's
+            # attention/FFN layers: ~48% less runtime memory with no measurable
+            # quality loss, per Kyutai's own benchmarks. Worth it on a memory-capped
+            # host like Render's free/entry instance types.
+            _model = TTSModel.load_model(quantize=True)
             _voice_state = _model.get_state_for_audio_prompt(str(reference))
         except Exception as exc:
             raise TTSError(f"Could not load the local Pocket TTS voice model: {exc}") from exc
     return _model, _voice_state
+
+
+def unload_model() -> None:
+    """Release the cached model and voice state to free memory.
+
+    Call this once all scenes' narration has been generated and before starting
+    memory-heavy ffmpeg encoding, so the torch model's resident memory and the
+    video encoder's memory never have to coexist at their peaks.
+    """
+    global _model, _voice_state
+    with _model_lock:
+        _model = None
+        _voice_state = None
+    import gc
+
+    gc.collect()
 
 
 def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
