@@ -15,11 +15,60 @@ from giphy import GiphyError, search_gifs
 from pexels import PexelsError, search_videos
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
-jobs = {}
-jobs_lock = threading.Lock()
+    jobs = {}
+    jobs_lock = threading.Lock()
+    JOB_DIR = Path(os.getenv("RENDER_JOB_DIR", "projects/.render_jobs"))
+    JOB_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@app.after_request
+    def _job_path(job_id: str) -> Path:
+      return JOB_DIR / f"{job_id}.json"
+
+
+    def _persist_job(job_id: str, job: dict) -> None:
+      JOB_DIR.mkdir(parents=True, exist_ok=True)
+      target = _job_path(job_id)
+      temporary = target.with_suffix(".tmp")
+      temporary.write_text(json.dumps(job), encoding="utf-8")
+      temporary.replace(target)
+
+
+    def set_job(job_id: str, **updates: str) -> dict:
+      with jobs_lock:
+          job = {**jobs.get(job_id, {}), **updates}
+          jobs[job_id] = job
+          _persist_job(job_id, job)
+          return dict(job)
+
+
+    def get_job(job_id: str) -> dict | None:
+      try:
+          return json.loads(_job_path(job_id).read_text(encoding="utf-8"))
+      except (FileNotFoundError, OSError, json.JSONDecodeError):
+          with jobs_lock:
+              job = jobs.get(job_id)
+          return dict(job) if job else None
+
+
+    def recover_interrupted_jobs() -> None:
+      for job_path in JOB_DIR.glob("*.json"):
+          try:
+              job = json.loads(job_path.read_text(encoding="utf-8"))
+          except (OSError, json.JSONDecodeError):
+              continue
+          if job.get("status") in {"queued", "running"}:
+              job["status"] = "failed"
+              job["error"] = "Render worker restarted before this job completed. Start a new render."
+              try:
+                  job_path.write_text(json.dumps(job), encoding="utf-8")
+              except OSError:
+                  continue
+
+
+    recover_interrupted_jobs()
+
+
+    @app.after_request
 def add_cors_headers(response):
   origin = request.headers.get("Origin")
   allowed_origin = os.getenv("FRONTEND_ORIGIN", "*")
@@ -55,6 +104,7 @@ def compact_video(video: dict, media_type: str) -> dict:
 
 
 def run_render(job_id: str, payload: dict) -> None:
+  set_job(job_id, status="running")
   script_path = None
   try:
       render_payload = dict(payload)
@@ -73,11 +123,9 @@ def run_render(job_id: str, payload: dict) -> None:
       output = Path("projects") / str(render_payload["project_id"]) / "output" / "final.mp4"
       if not output.exists():
           raise RuntimeError("Renderer finished without producing an MP4.")
-      with jobs_lock:
-          jobs[job_id] = {"status": "complete", "output": str(output)}
+      set_job(job_id, status="complete", output=str(output))
   except Exception as exc:
-      with jobs_lock:
-          jobs[job_id] = {"status": "failed", "error": str(exc)}
+      set_job(job_id, status="failed", error=str(exc))
   finally:
       if script_path:
           script_path.unlink(missing_ok=True)
@@ -126,16 +174,14 @@ def render():
   if not isinstance(payload, dict) or not payload.get("project_id") or not isinstance(payload.get("scenes"), list) or not payload["scenes"]:
       return jsonify(error="Request must contain a project_id and at least one scene."), 400
   job_id = uuid.uuid4().hex
-  with jobs_lock:
-      jobs[job_id] = {"status": "queued"}
+  set_job(job_id, status="queued")
   threading.Thread(target=run_render, args=(job_id, payload), daemon=True).start()
   return jsonify(job_id=job_id, status_url=f"/api/render/{job_id}", download_url=f"/api/render/{job_id}/download"), 202
 
 
 @app.get("/api/render/<job_id>")
 def render_status(job_id: str):
-  with jobs_lock:
-      job = jobs.get(job_id)
+  job = get_job(job_id)
   if not job:
       return jsonify(error="Render job not found."), 404
   return jsonify({key: value for key, value in job.items() if key != "output"})
