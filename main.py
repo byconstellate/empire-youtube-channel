@@ -32,6 +32,8 @@ def load_script(path: Path) -> dict:
         raise ValueError("Script must contain a project_id and a scenes array.")
     if not data["scenes"]:
         raise ValueError("Script must contain at least one scene.")
+    if "audio_enabled" in data and not isinstance(data["audio_enabled"], bool):
+        raise ValueError("audio_enabled must be true or false.")
 
     previous_background = None
     for index, scene in enumerate(data["scenes"], start=1):
@@ -81,20 +83,26 @@ def process(script: dict) -> Path:
     for directory in (footage_dir, audio_dir, scenes_dir, output_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    # Pass 1: generate every scene's narration first, while the Pocket TTS model
-    # is loaded. Doing this up front (instead of interleaved with ffmpeg encoding)
-    # means we can fully unload the model before the memory-heavy video work
-    # starts, so the two never compete for RAM at the same time.
-    audio_paths: dict[str, Path] = {}
-    for scene in script["scenes"]:
-        scene_id = str(scene["scene_id"])
-        audio_path = audio_dir / f"scene_{scene_id}.mp3"
-        print(f"\nGenerating voice for scene {scene_id}...")
-        generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
-        audio_paths[scene_id] = audio_path
+    audio_enabled = script.get("audio_enabled", True)
+    audio_paths: dict[str, Path | None] = {}
+    if audio_enabled:
+        # Pass 1: generate every scene's narration first, while the Pocket TTS model
+        # is loaded. Doing this up front (instead of interleaved with ffmpeg encoding)
+        # means we can fully unload the model before the memory-heavy video work
+        # starts, so the two never compete for RAM at the same time.
+        for scene in script["scenes"]:
+            scene_id = str(scene["scene_id"])
+            audio_path = audio_dir / f"scene_{scene_id}.mp3"
+            print(f"\nGenerating voice for scene {scene_id}...")
+            generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
+            audio_paths[scene_id] = audio_path
 
-    print("\nReleasing the voice model before encoding video...")
-    unload_model()
+        print("\nReleasing the voice model before encoding video...")
+        unload_model()
+    else:
+        print("\nAudio disabled — skipping voice generation.")
+        for scene in script["scenes"]:
+            audio_paths[str(scene["scene_id"])] = None
 
     # Pass 2: download footage and run ffmpeg for each scene, now that the
     # torch model's memory has been freed.
