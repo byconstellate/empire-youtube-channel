@@ -1,1 +1,20 @@
-FROM python:3.11-slim\n\nENV PYTHONDONTWRITEBYTECODE=1 \\n    PYTHONUNBUFFERED=1 \\n    VIDEO_WIDTH=1280 \\n    VIDEO_HEIGHT=720 \\n    VIDEO_FPS=24 \\n    MAX_SOURCE_WIDTH=720 \\n    FFMPEG_THREADS=1\n\nRUN apt-get update \\n    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \\n    && rm -rf /var/lib/apt/lists/*\n\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\n\nCMD [\"sh\", \"-c\", \"exec gunicorn --bind 0.0.0.0:$PORT --timeout 600 server:app\"]\n
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIDEO_WIDTH=1280 \
+    VIDEO_HEIGHT=720 \
+    VIDEO_FPS=24 \
+    MAX_SOURCE_WIDTH=720 \
+    FFMPEG_THREADS=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-5000} --timeout 600 server:app"]
