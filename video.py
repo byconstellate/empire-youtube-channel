@@ -57,23 +57,57 @@ def _caption_file(text: str) -> Path:
     return caption_path
 
 
+def _caption_line_files(text: str) -> list[Path]:
+    """One temp file per wrapped line, so each line can be centered on its own."""
+    lines = wrap_caption(text).split("\n")
+    paths = []
+    for line in lines:
+        handle, path = tempfile.mkstemp(prefix="empire_caption_line_", suffix=".txt")
+        os.close(handle)
+        line_path = Path(path)
+        line_path.write_text(line, encoding="utf-8")
+        paths.append(line_path)
+    return paths
+
+
 def caption_filter(
     caption_path: Path,
     text_position: str = VIDEO_TEXT_POSITION,
     text_color: str = DEFAULT_TEXT_COLOR,
     outline_color: str = DEFAULT_OUTLINE_COLOR,
 ) -> str:
+    """Build one or more chained drawtext filters, each line independently centered.
+
+    caption_path may point to a file containing multiple newline-separated
+    lines (from _caption_file); it is re-split here so each line gets its
+    own drawtext with x=(w-text_w)/2, since this ffmpeg build doesn't
+    support drawtext's text_align option for multi-line textfiles.
+    """
     if text_position not in {"middle", "bottom"}:
         raise FFmpegError('TEXT_POSITION must be "middle" or "bottom".')
-    path = caption_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
+    lines = caption_path.read_text(encoding="utf-8").split("\n")
     font = ":".join(_font_args())
     prefix = f"{font}:" if font else ""
-    y_position = "(h-text_h)/2" if text_position == "middle" else "h*0.72"
-    return (
-        f"drawtext={prefix}textfile='{path}':"
-        f"fontcolor={text_color}:fontsize=52:borderw=4:bordercolor={outline_color}:"
-        f"x=(w-text_w)/2:y={y_position}:line_spacing=12:text_align=center"
-    )
+    line_height = 52 + 12  # fontsize + line_spacing, matches previous single-block layout
+    total_height = line_height * len(lines)
+    if text_position == "middle":
+        top = f"(h-{total_height})/2"
+    else:
+        top = f"h*0.72-({total_height}/2)"
+    filters = []
+    for index, line in enumerate(lines):
+        handle, tmp_path = tempfile.mkstemp(prefix="empire_caption_line_", suffix=".txt")
+        os.close(handle)
+        line_path = Path(tmp_path)
+        line_path.write_text(line, encoding="utf-8")
+        escaped_path = line_path.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:")
+        y_position = f"({top})+{index}*{line_height}"
+        filters.append(
+            f"drawtext={prefix}textfile='{escaped_path}':"
+            f"fontcolor={text_color}:fontsize=52:borderw=4:bordercolor={outline_color}:"
+            f"x=(w-text_w)/2:y={y_position}"
+        )
+    return ",".join(filters)
 
 
 def footage_filter(
