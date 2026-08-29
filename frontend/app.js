@@ -1,4 +1,3 @@
-```javascript
 const API_BASE = (document.querySelector('meta[name="api-base"]')?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
 function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
@@ -1473,4 +1472,3 @@ scenes.addEventListener(
 );
 
 renderLineBuilder();
-```
