@@ -33,6 +33,7 @@ function renderScenes(script) {
     if (scene.scene_type !== "text") {
       scene.pan_region = scene.pan_region === "bottom_50" ? "bottom_50" : "top_50";
       scene.pan_direction = scene.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
+      scene.show_text = scene.show_text !== false;
     }
     scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
   });
@@ -42,6 +43,7 @@ function renderScenes(script) {
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.scene_type === "text" ? "Full-screen text" : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}</small>
         ${scene.scene_type === "video" ? `<label class="scene-control">Pan area <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option></select></label><label class="scene-control">Pan motion <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}"><option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option><option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option></select></label>` : ""}
         <label class="scene-control">Text position <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}"><option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option><option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option></select></label>
+        ${scene.scene_type !== "text" ? `<label class="scene-control scene-control-checkbox"><input type="checkbox" data-show-text="${index}" aria-label="Show text overlay for scene ${index + 1}" ${scene.show_text !== false ? "checked" : ""}> Show text overlay</label>` : ""}
         ${scene.scene_type !== "text" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
     </article>`).join("");
@@ -69,6 +71,7 @@ function normalizeScript(script) {
     normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
     normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
+    normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
     return normalized;
   }) };
 }
@@ -136,6 +139,12 @@ scenes.addEventListener("change", (event) => {
   if (textPosition) {
     const scene = currentScript.scenes[Number(textPosition.dataset.textPosition)];
     if (scene) scene.text_position = textPosition.value;
+    return;
+  }
+  const showText = event.target.closest("input[data-show-text]");
+  if (showText) {
+    const scene = currentScript.scenes[Number(showText.dataset.showText)];
+    if (scene) scene.show_text = showText.checked;
   }
 });
 scenes.addEventListener("click", (event) => {
@@ -253,6 +262,7 @@ function parseLineByLineScript() {
     normalized.pan_region = normalized.pan_region === "bottom_50" ? "bottom_50" : "top_50";
     normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
+    normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
     return normalized;
   });
   return { project_id: parsed?.project_id || "empire_youtube_channel", scenes: normalizedScenes };
@@ -297,6 +307,11 @@ function renderLineBuilder() {
     panDirectionLabel.innerHTML += '<select data-pan-direction="' + activeLineIndex + '"><option value="top_to_bottom">Top → bottom</option><option value="bottom_to_top">Bottom → top</option></select>';
     panDirectionLabel.querySelector("select").value = scene.pan_direction;
     grid.appendChild(panDirectionLabel);
+    const showTextLabel = document.createElement("label");
+    showTextLabel.className = "scene-control scene-control-checkbox";
+    showTextLabel.innerHTML = '<input type="checkbox" data-show-text="' + activeLineIndex + '"> Show text overlay';
+    showTextLabel.querySelector("input").checked = scene.show_text !== false;
+    grid.appendChild(showTextLabel);
   }
   const textPositionLabel = document.createElement("label");
   textPositionLabel.textContent = "Text position";

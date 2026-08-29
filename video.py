@@ -74,7 +74,11 @@ def footage_filter(
     caption_path: Path | None = None,
     text_position: str = VIDEO_TEXT_POSITION,
 ) -> str:
-    """Scale footage and pan within the selected top or bottom half."""
+    """Scale footage and pan within the selected top or bottom half.
+
+    Pass caption_path=None to skip the text overlay entirely (e.g. when the
+    scene's show_text flag is off) while keeping the pan/crop effect.
+    """
     if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
         raise FFmpegError(
             'VIDEO_PAN_DIRECTION must be "top_to_bottom" or "bottom_to_top".'
@@ -86,11 +90,14 @@ def footage_filter(
         y_position = f"(ih-oh)*0.5*({progress})"
     else:
         y_position = f"(ih-oh)*(0.5+0.5*({progress}))"
-    return (
+    base = (
         f"scale={VIDEO_WIDTH}:-2:force_original_aspect_ratio=increase,"
         f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:0:{y_position},"
-        f"setsar=1,{caption_filter(caption_path, text_position)}"
+        "setsar=1"
     )
+    if caption_path is None:
+        return base
+    return f"{base},{caption_filter(caption_path, text_position)}"
 
 
 def create_video_scene(
@@ -102,8 +109,9 @@ def create_video_scene(
     pan_direction: str = VIDEO_PAN_DIRECTION,
     pan_region: str = VIDEO_PAN_REGION,
     text_position: str = VIDEO_TEXT_POSITION,
+    show_text: bool = True,
 ) -> None:
-    caption_path = _caption_file(text)
+    caption_path = _caption_file(text) if show_text else None
     try:
         video_filter = (
             footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position)
@@ -146,7 +154,8 @@ def create_video_scene(
 
 
     finally:
-        caption_path.unlink(missing_ok=True)
+        if caption_path is not None:
+            caption_path.unlink(missing_ok=True)
 def create_text_scene(audio: Path, text: str, duration: float, background: str, output: Path, text_position: str = VIDEO_TEXT_POSITION) -> None:
     caption_path = _caption_file(text)
     try:

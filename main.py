@@ -58,6 +58,8 @@ def load_script(path: Path) -> dict:
             raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
         if scene["scene_type"] in {"video", "gif"} and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
             raise ValueError(f'Video scene {index} pan_direction must be "top_to_bottom" or "bottom_to_top".')
+        if "show_text" in scene and not isinstance(scene["show_text"], bool):
+            raise ValueError(f'Scene {index} show_text must be true or false.')
         if scene.get("text_position", VIDEO_TEXT_POSITION) not in {"middle", "bottom"}:
             raise ValueError(f'Scene {index} text_position must be "middle" or "bottom."')
         background = BACKGROUNDS[(index - 1) % len(BACKGROUNDS)]
@@ -106,7 +108,7 @@ def process(script: dict) -> Path:
                     selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
-            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION), pan_region=scene.get("pan_region", VIDEO_PAN_REGION), text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
+            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION), pan_region=scene.get("pan_region", VIDEO_PAN_REGION), text_position=scene.get("text_position", VIDEO_TEXT_POSITION), show_text=scene.get("show_text", True))
         else:
             background = BACKGROUNDS[index % len(BACKGROUNDS)]
             create_text_scene(audio_path, scene["text"], duration, background, scene_path, text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
