@@ -89,6 +89,11 @@ def index():
   return app.send_static_file("index.html")
 
 
+@app.get("/healthz")
+def healthz():
+  return jsonify(status="ok")
+
+
 def compact_video(video: dict, media_type: str) -> dict:
   files = video.get("video_files", [])
   preview = next((item for item in files if item.get("width", 0) <= item.get("height", 0)), None) or (files[0] if files else {})
@@ -117,7 +122,7 @@ def run_render(job_id: str, payload: dict) -> None:
       with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as script_file:
           json.dump(render_payload, script_file)
           script_path = Path(script_file.name)
-      completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True)
+      completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True, timeout=540)
       if completed.returncode != 0:
           raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "Render failed.")
       output = Path("projects") / str(render_payload["project_id"]) / "output" / "final.mp4"
