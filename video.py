@@ -63,7 +63,7 @@ def caption_filter(caption_path: Path, text_position: str = VIDEO_TEXT_POSITION)
     return (
         f"drawtext={prefix}textfile='{path}':"
         "fontcolor=#ff00ff:fontsize=52:borderw=4:bordercolor=white:"
-        f"x=(w-text_w)/2:y={y_position}:line_spacing=12"
+        f"x=(w-text_w)/2:y={y_position}:line_spacing=12:text_align=center"
     )
 
 def footage_filter(
