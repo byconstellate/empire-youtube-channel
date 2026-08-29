@@ -33,6 +33,7 @@ Add values to `.env`:
 
 ```text
 PEXELS_API_KEY=your_pexels_key
+REFERENCE_VOICE_FILE=reference_voice.wav
 ```
 
 The program reads environment variables. If your shell does not load `.env` automatically, export the values before running, or load them with your preferred dotenv workflow. Google voice generation does not need a TTS API key. Set `GOOGLE_TTS_LANGUAGE` to a supported language code such as `en`, `en-au`, `en-uk`, or `th`.
@@ -44,9 +45,10 @@ The browser studio accepts a plain-text script with one line per scene. After lo
 1. Choose **Text**, **GIF**, or **Video** for the current line.
 2. GIF lines automatically search GIPHY; video lines automatically search Pexels using the line text.
 3. Select a media result when needed, then choose **Next line**.
+   If the automatic results are not suitable, enter a shorter keyword in **Search keyword** and search GIPHY or Pexels again.
 4. Export the completed lineup to MP4.
 
-The web preview endpoint uses the server-side `GIPHY_API_KEY` environment variable. Add that secret to the deployment; never put it in the browser code. The command-line renderer remains compatible with the existing JSON format and can use Pexels as its fallback when no clip is selected.
+The web preview endpoint uses the server-side `GIPHY_API_KEY` environment variable. Add that secret to the deployment; never put it in the browser code. The command-line renderer remains compatible with the existing JSON format and can use Pexels as its fallback when no clip is selected. The bundled `reference_voice.wav` file is used by default; set `REFERENCE_VOICE_FILE` only when you want another sample.
 
 ## Script format
 
