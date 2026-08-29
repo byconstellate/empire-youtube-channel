@@ -10,8 +10,6 @@ services:
         sync: false
       - key: PEXELS_API_KEY
         sync: false
-      - key: TTS_PROVIDER
-        value: google
       - key: REFERENCE_VOICE_FILE
         value: reference_voice.wav
       - key: AUTO_APPROVE_FOOTAGE
