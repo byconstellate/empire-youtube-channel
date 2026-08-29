@@ -137,8 +137,8 @@ def footage_filter(
     else:
         y_position = f"(ih-oh)*(0.5+0.5*({progress}))"
     base = (
-        f"scale={VIDEO_WIDTH}:-2:force_original_aspect_ratio=increase,"
-        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:0:{y_position},"
+        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-ow)/2:{y_position},"
         "setsar=1"
     )
     if caption_path is None:
