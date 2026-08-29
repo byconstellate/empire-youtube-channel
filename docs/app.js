@@ -238,6 +238,7 @@ function renderLineBuilder() {
   }
   const scene = currentScript.scenes[activeLineIndex];
   const isMedia = scene.scene_type !== "text";
+  const provider = scene.scene_type === "gif" ? "GIPHY" : "Pexels";
   scenes.innerHTML = "";
   const builder = document.createElement("section");
   builder.className = "line-builder";
