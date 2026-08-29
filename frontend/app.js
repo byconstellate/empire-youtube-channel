@@ -80,6 +80,7 @@ function renderScenes(script) {
       scene.show_text = scene.show_text !== false;
     }
     scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
+    <label class="scene-control">Duration (mm:ss) <input type="text" data-duration="${index}" value="${formatDuration(scene.duration_seconds)}" aria-label="Duration for scene ${index + 1}" /></label>
     normalizeColors(scene);
   });
   scenes.innerHTML = script.scenes.map((scene, index) => `
@@ -389,6 +390,11 @@ function renderLineBuilder() {
   textPositionLabel.innerHTML += '<select data-text-position="' + activeLineIndex + '"><option value="bottom">Bottom</option><option value="middle">Middle</option></select>';
   textPositionLabel.querySelector("select").value = scene.text_position;
   grid.appendChild(textPositionLabel);
+  const durationLabel = document.createElement("label");
+  durationLabel.textContent = "Duration (mm:ss)";
+  durationLabel.innerHTML += '<input type="text" data-duration="' + activeLineIndex + '" />';
+  durationLabel.querySelector("input").value = formatDuration(scene.duration_seconds);
+  grid.appendChild(durationLabel);
   const textColorLabel = document.createElement("label");
   textColorLabel.textContent = "Text color";
   textColorLabel.innerHTML += colorSelectHtml("text-color", activeLineIndex, scene.text_color);
