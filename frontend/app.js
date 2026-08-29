@@ -1,6 +1,23 @@
 const API_BASE = (document.querySelector("meta[name=\"api-base\"]")?.content || window.EMPIRE_API_BASE || new URLSearchParams(window.location.search).get("api") || "").replace(/\/$/, "");
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
 function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
+const TEXT_COLOR_OPTIONS = [
+  { value: "#000000", label: "Black" },
+  { value: "#ffffff", label: "White" },
+  { value: "#00ff00", label: "Green" },
+  { value: "#ff00ff", label: "Pink" },
+];
+function colorSelectHtml(dataAttr, index, selected) {
+  return `<select data-${dataAttr}="${index}">` + TEXT_COLOR_OPTIONS.map((o) =>
+    `<option value="${o.value}" ${o.value === selected ? "selected" : ""}>${o.label}</option>`
+  ).join("") + `</select>`;
+}
+function normalizeColors(scene) {
+  const valid = (v, fallback) => (TEXT_COLOR_OPTIONS.some((o) => o.value === v) ? v : fallback);
+  scene.text_color = valid(scene.text_color, "#ff00ff");
+  scene.outline_color = valid(scene.outline_color, "#ffffff");
+  scene.bg_color = valid(scene.bg_color, "#000000");
+}
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
@@ -48,6 +65,7 @@ function renderScenes(script) {
       scene.show_text = scene.show_text !== false;
     }
     scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
+    normalizeColors(scene);
   });
   scenes.innerHTML = script.scenes.map((scene, index) => `
     <article class="scene" data-scene="${index}">
@@ -55,6 +73,9 @@ function renderScenes(script) {
       <div class="scene-copy"><strong>${escapeHtml(scene.text)}</strong><small>${scene.scene_type === "text" ? "Full-screen text" : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}</small>
         ${scene.scene_type === "video" ? `<label class="scene-control">Pan area <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}"><option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option><option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option></select></label><label class="scene-control">Pan motion <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}"><option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option><option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option></select></label>` : ""}
         <label class="scene-control">Text position <select data-text-position="${index}" aria-label="Text position for scene ${index + 1}"><option value="bottom" ${scene.text_position === "bottom" ? "selected" : ""}>Bottom (default)</option><option value="middle" ${scene.text_position === "middle" ? "selected" : ""}>Middle</option></select></label>
+        <label class="scene-control">Text color ${colorSelectHtml("text-color", index, scene.text_color)}</label>
+        <label class="scene-control">Outline color ${colorSelectHtml("outline-color", index, scene.outline_color)}</label>
+        ${scene.scene_type === "text" ? `<label class="scene-control">Background color ${colorSelectHtml("bg-color", index, scene.bg_color)}</label>` : ""}
         ${scene.scene_type !== "text" ? `<label class="scene-control scene-control-checkbox"><input type="checkbox" data-show-text="${index}" aria-label="Show text overlay for scene ${index + 1}" ${scene.show_text !== false ? "checked" : ""}> Show text overlay</label>` : ""}
         ${scene.scene_type !== "text" ? `<div class="scene-actions"><button type="button" data-action="approve" aria-pressed="false">Approve footage</button><button type="button" data-action="reject" aria-pressed="false">Reject candidate</button></div>` : ""}
       </div><span class="scene-type">${scene.scene_type.toUpperCase()}</span>
@@ -84,6 +105,7 @@ function normalizeScript(script) {
     normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
     normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
+    normalizeColors(normalized);
     return normalized;
   }) };
 }
@@ -152,6 +174,24 @@ scenes.addEventListener("change", (event) => {
   if (textPosition) {
     const scene = currentScript.scenes[Number(textPosition.dataset.textPosition)];
     if (scene) scene.text_position = textPosition.value;
+    return;
+  }
+  const textColor = event.target.closest("select[data-text-color]");
+  if (textColor) {
+    const scene = currentScript.scenes[Number(textColor.dataset.textColor)];
+    if (scene) scene.text_color = textColor.value;
+    return;
+  }
+  const outlineColor = event.target.closest("select[data-outline-color]");
+  if (outlineColor) {
+    const scene = currentScript.scenes[Number(outlineColor.dataset.outlineColor)];
+    if (scene) scene.outline_color = outlineColor.value;
+    return;
+  }
+  const bgColor = event.target.closest("select[data-bg-color]");
+  if (bgColor) {
+    const scene = currentScript.scenes[Number(bgColor.dataset.bgColor)];
+    if (scene) scene.bg_color = bgColor.value;
     return;
   }
   const showText = event.target.closest("input[data-show-text]");
@@ -277,6 +317,7 @@ function parseLineByLineScript() {
     normalized.pan_direction = normalized.pan_direction === "bottom_to_top" ? "bottom_to_top" : "top_to_bottom";
     normalized.text_position = normalized.text_position === "middle" ? "middle" : "bottom";
     normalized.show_text = normalized.scene_type === "text" ? true : normalized.show_text !== false;
+    normalizeColors(normalized);
     return normalized;
   });
   return { project_id: parsed?.project_id || "empire_youtube_channel", scenes: normalizedScenes };
@@ -294,6 +335,7 @@ function renderLineBuilder() {
     return;
   }
   const scene = currentScript.scenes[activeLineIndex];
+  normalizeColors(scene);
   const isMedia = scene.scene_type !== "text";
   const provider = scene.scene_type === "gif" ? "GIPHY" : "Pexels";
   scenes.innerHTML = "";
@@ -332,6 +374,20 @@ function renderLineBuilder() {
   textPositionLabel.innerHTML += '<select data-text-position="' + activeLineIndex + '"><option value="bottom">Bottom</option><option value="middle">Middle</option></select>';
   textPositionLabel.querySelector("select").value = scene.text_position;
   grid.appendChild(textPositionLabel);
+  const textColorLabel = document.createElement("label");
+  textColorLabel.textContent = "Text color";
+  textColorLabel.innerHTML += colorSelectHtml("text-color", activeLineIndex, scene.text_color);
+  grid.appendChild(textColorLabel);
+  const outlineColorLabel = document.createElement("label");
+  outlineColorLabel.textContent = "Outline color";
+  outlineColorLabel.innerHTML += colorSelectHtml("outline-color", activeLineIndex, scene.outline_color);
+  grid.appendChild(outlineColorLabel);
+  if (!isMedia) {
+    const bgColorLabel = document.createElement("label");
+    bgColorLabel.textContent = "Background color";
+    bgColorLabel.innerHTML += colorSelectHtml("bg-color", activeLineIndex, scene.bg_color);
+    grid.appendChild(bgColorLabel);
+  }
   const status = builder.querySelector(".line-builder-status");
   const nextButton = builder.querySelector("[data-line-next]");
   const previousButton = builder.querySelector("[data-line-prev]");
@@ -414,4 +470,3 @@ scenes.addEventListener("click", (event) => {
   }, 0);
 });
 renderLineBuilder();
-
