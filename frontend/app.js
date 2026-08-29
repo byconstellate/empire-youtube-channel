@@ -22,6 +22,52 @@ function normalizeColors(scene) {
   scene.bg_color = valid(scene.bg_color, "#000000");
 }
 
+// These mirror the server's ffmpeg drawtext math (video.py caption_filter) so the
+// instant HTML/CSS preview lines up with the real render: fontsize=52 and
+// borderw=4 on a 1280-wide canvas become proportional cqw units here, and the
+// "bottom" position centers the text block at 72% of the frame height exactly
+// like the server's `top = h*0.72-(total_height/2)` formula does.
+function scenePreviewBackgroundStyle(scene) {
+  if (scene.scene_type === "text") {
+    return `background-color:${scene.bg_color || "#000000"};`;
+  }
+  const image = scene.selected_video && scene.selected_video.image;
+  if (image) {
+    return `background-image:url('${String(image).replace(/'/g, "%27")}');background-size:cover;background-position:center;`;
+  }
+  return "background:repeating-linear-gradient(45deg,#1a1a1a,#1a1a1a 10px,#262626 10px,#262626 20px);";
+}
+
+function scenePreviewTextStyle(scene) {
+  const show = scene.scene_type === "text" ? true : scene.show_text !== false;
+  if (!show) return "display:none;";
+  const top = scene.text_position === "middle" ? "50%" : "72%";
+  const outline = scene.outline_color || "#ffffff";
+  return (
+    `top:${top};transform:translateY(-50%);` +
+    `color:${scene.text_color || "#ff00ff"};` +
+    `-webkit-text-stroke:0.31cqw ${outline};paint-order:stroke fill;`
+  );
+}
+
+function updateScenePreview(index) {
+  const scene = currentScript.scenes[index];
+  if (!scene) return;
+  const box = scenes.querySelector(`.scene-live-preview[data-preview="${index}"]`);
+  if (!box) return;
+  box.setAttribute("style", scenePreviewBackgroundStyle(scene));
+  const text = box.querySelector(`[data-preview-text="${index}"]`);
+  if (text) text.setAttribute("style", scenePreviewTextStyle(scene));
+}
+
+function scenePreviewHtml(scene, index) {
+  return `
+    <div class="scene-live-preview" data-preview="${index}" style="${scenePreviewBackgroundStyle(scene)}">
+      <span class="scene-live-preview-text" data-preview-text="${index}" style="${scenePreviewTextStyle(scene)}">${escapeHtml(scene.text)}</span>
+    </div>
+  `;
+}
+
 function parseDurationInput(value, fallback) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return fallback;
@@ -145,6 +191,8 @@ function renderScenes(script) {
             ? "Full-screen text"
             : (scene.scene_type === "gif" ? "GIPHY GIF" : "Pexels video")}
         </small>
+
+        ${scenePreviewHtml(scene, index)}
 
         ${scene.scene_type === "video" ? `
           <label class="scene-control">
@@ -400,6 +448,7 @@ async function loadFootagePreviews(script, expand = false) {
 
       button.addEventListener("click", () => {
         scene.selected_video = candidate;
+        updateScenePreview(currentScript.scenes.indexOf(scene));
 
         box.querySelectorAll(".footage-choice").forEach((item) => {
           item.classList.remove("approved");
@@ -527,6 +576,7 @@ scenes.addEventListener("change", (event) => {
 
     if (scene) {
       scene.text_position = textPosition.value;
+      updateScenePreview(Number(textPosition.dataset.textPosition));
     }
 
     return;
@@ -540,6 +590,7 @@ scenes.addEventListener("change", (event) => {
 
     if (scene) {
       scene.text_color = textColor.value;
+      updateScenePreview(Number(textColor.dataset.textColor));
     }
 
     return;
@@ -554,6 +605,7 @@ scenes.addEventListener("change", (event) => {
 
     if (scene) {
       scene.outline_color = outlineColor.value;
+      updateScenePreview(Number(outlineColor.dataset.outlineColor));
     }
 
     return;
@@ -567,6 +619,7 @@ scenes.addEventListener("change", (event) => {
 
     if (scene) {
       scene.bg_color = bgColor.value;
+      updateScenePreview(Number(bgColor.dataset.bgColor));
     }
 
     return;
@@ -580,6 +633,7 @@ scenes.addEventListener("change", (event) => {
 
     if (scene) {
       scene.show_text = showText.checked;
+      updateScenePreview(Number(showText.dataset.showText));
     }
   }
 });
@@ -991,7 +1045,11 @@ function renderLineBuilder() {
   builder.className = "line-builder";
 
   builder.innerHTML =
-    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
+    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-preview-slot\"></div><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
+
+  builder
+    .querySelector(".line-builder-preview-slot")
+    .innerHTML = scenePreviewHtml(scene, activeLineIndex);
 
   builder
     .querySelector(".line-builder-head span")
