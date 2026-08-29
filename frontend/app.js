@@ -168,7 +168,11 @@ renderButton.addEventListener("click", async () => {
     for (let attempt = 0; attempt < 180; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 2000));
       const statusResponse = await fetch(apiUrl(job.status_url));
-      if (!statusResponse.ok) { const detail = await statusResponse.text(); throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`); }
+      if (!statusResponse.ok) {
+          const detail = await statusResponse.text();
+          if (statusResponse.status === 404) throw new Error("The Render worker restarted before this job could be tracked. Start the render again.");
+          throw new Error(`Render status failed with HTTP ${statusResponse.status}: ${detail.slice(0, 240)}`);
+        }
       state = await statusResponse.json();
       if (state.status === "failed") throw new Error(state.error || "Render failed.");
       if (state.status === "complete") break;
