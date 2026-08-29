@@ -3,6 +3,7 @@ function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${p
 function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
 const sampleScript = {
   project_id: "empire_youtube_channel",
+  audio_enabled: false,
   scenes: [
     { scene_id: "1", text: "Your business doesn't need another strategy.", duration_seconds: 5, scene_type: "video", search_query: "woman working laptop business" },
     { scene_id: "2", text: "It needs you to actually pick one.", duration_seconds: 5, scene_type: "text" }
@@ -13,12 +14,24 @@ const scenes = document.querySelector("#scenes");
 const count = document.querySelector("#scene-count");
 const error = document.querySelector("#script-error");
 const renderButton = document.querySelector("#render-button");
+let audioToggle = document.querySelector("#audio-enabled");
+if (!audioToggle) {
+  const audioControl = document.createElement("label");
+  audioControl.className = "audio-toggle";
+  audioControl.htmlFor = "audio-enabled";
+  audioControl.innerHTML = `<input id="audio-enabled" type="checkbox" /><span class="audio-toggle-copy"><strong>Include audio narration</strong><small>Turn off to skip TTS and render a silent MP4.</small></span><span class="audio-toggle-switch" aria-hidden="true"></span>`;
+  document.querySelector(".voice-panel .voice-note")?.before(audioControl);
+  audioToggle = audioControl.querySelector("#audio-enabled");
+}
 const loadButton = document.querySelector("#load-script");
 const renderHint = document.querySelector("#render-status");
 renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Instant browser preview is ready; MP4 export runs separately in the background.";
 let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
+if (audioToggle) audioToggle.checked = currentScript.audio_enabled === true;
+function syncAudioToggle() { if (audioToggle) audioToggle.checked = currentScript.audio_enabled === true; }
+audioToggle?.addEventListener("change", () => { currentScript.audio_enabled = audioToggle.checked; });
 
 function renderScenes(script) {
   count.textContent = `${script.scenes.length} scenes`;
@@ -67,7 +80,7 @@ async function readApiError(response, fallback) {
   }
 }
 function normalizeScript(script) {
-  return { ...script, scenes: script.scenes.map((scene, index) => {
+  return { ...script, audio_enabled: script.audio_enabled === true, scenes: script.scenes.map((scene, index) => {
     const normalized = { ...scene, scene_id: String(scene.scene_id || index + 1), text: String(scene.text || "").trim(), duration_seconds: Number(scene.duration_seconds) || 5 };
     if (!normalized.text) throw new Error("Every line needs text.");
     normalized.scene_type = ["text", "gif", "video"].includes(normalized.scene_type) ? normalized.scene_type : "text";
@@ -114,6 +127,7 @@ async function loadScript() {
     if (!script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) throw new Error("Add a project_id and at least one scene.");
     if (script.scenes.some((scene) => !scene || !scene.text)) throw new Error("Each scene needs text.");
     currentScript = normalizeScript(script);
+    syncAudioToggle();
     error.textContent = "";
     renderScenes(script);
     renderBrowserPreview(script);
@@ -146,11 +160,12 @@ renderButton.addEventListener("click", async () => {
   const status = document.querySelector("#render-status");
   renderButton.disabled = true; renderButton.textContent = "Rendering…";
   title.textContent = "Creating your video";
-  status.textContent = "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…";
+  const includeAudio = currentScript.audio_enabled === true;
+  status.textContent = includeAudio ? "Generating voice, fetching footage, and encoding a 1920 × 1080 MP4…" : "Skipping audio and encoding a silent 1920 × 1080 MP4…";
   error.textContent = "";
   try {
     if (!API_BASE && /github\.io$/i.test(window.location.hostname)) throw new Error(backendUnavailableMessage());
-    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, language: document.querySelector("#language").value }) });
+    const response = await fetch(apiUrl("/api/render"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...currentScript, audio_enabled: includeAudio, language: document.querySelector("#language").value }) });
     if (!response.ok) throw new Error(await readApiError(response, "The renderer could not start."));
     if (!response.ok) { const detail = await response.text(); throw new Error(`Render start failed with HTTP ${response.status}: ${detail.slice(0, 240)}`); }
     const job = await response.json();
