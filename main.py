@@ -50,7 +50,6 @@ def load_script(path: Path) -> dict:
     if "audio_enabled" in data and not isinstance(data["audio_enabled"], bool):
         raise ValueError("audio_enabled must be true or false.")
 
-    previous_background = None
     for index, scene in enumerate(data["scenes"], start=1):
         if not isinstance(scene, dict):
             raise ValueError(f"Scene {index} must be an object.")
@@ -85,10 +84,6 @@ def load_script(path: Path) -> dict:
             raise ValueError(f'Scene {index} outline_color must be one of {sorted(ALLOWED_COLORS)}.')
         if "bg_color" in scene and scene["bg_color"] and scene["bg_color"] not in ALLOWED_COLORS:
             raise ValueError(f'Scene {index} bg_color must be one of {sorted(ALLOWED_COLORS)}.')
-        background = scene_background(scene, index - 1)
-        if background == previous_background:
-            raise ValueError("Text scene backgrounds must not repeat consecutively.")
-        previous_background = background
     return data
 
 
