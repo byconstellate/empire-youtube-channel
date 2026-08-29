@@ -1,4 +1,4 @@
-"""Voice generation with a lightweight Google default and optional local cloning."""
+"""Local voice-cloning TTS using the open-source Chatterbox model."""
 
 import os
 import subprocess
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class TTSError(RuntimeError):
-    """Raised when voice generation fails."""
+    """Raised when local voice generation fails."""
 
 
 DEFAULT_REFERENCE_VOICE = Path(__file__).resolve().with_name("reference_voice.wav")
@@ -29,7 +29,7 @@ def _reference_voice_path() -> Path:
     return reference
 
 
-def _load_chatterbox():
+def _load_model():
     global _model
     if _model is not None:
         return _model
@@ -41,33 +41,26 @@ def _load_chatterbox():
             from chatterbox.tts_turbo import ChatterboxTurboTTS
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
+            # Nano keeps local CPU deployments practical while retaining zero-shot cloning.
             _model = ChatterboxTurboTTS.from_pretrained(device=device, nano=True)
         except Exception as exc:
-            raise TTSError(
-                "Could not load the optional Chatterbox voice model. "
-                "Use TTS_PROVIDER=google on Render or install chatterbox-tts locally: "
-                f"{exc}"
-            ) from exc
+            raise TTSError(f"Could not load the local Chatterbox voice model: {exc}") from exc
     return _model
 
 
-def _generate_google_voice(text: str, output_path: Path, language: str) -> None:
-    try:
-        from gtts import gTTS
+def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
+    """Create one MP3 using the bundled reference voice and local Chatterbox.
 
-        # gTTS uses regional accents through tld rather than en-uk/en-au language codes.
-        language_code = {"en-uk": "en", "en-au": "en"}.get(language, language or "en")
-        gTTS(text=text, lang=language_code, slow=False).save(str(output_path))
-    except Exception as exc:
-        raise TTSError(f"Google voice generation failed: {exc}") from exc
-
-
-def _generate_chatterbox_voice(text: str, output_path: Path) -> None:
+    The language argument remains part of the public interface for compatibility
+    with the existing renderer; Chatterbox Turbo Nano is the English voice model.
+    """
+    del language
     reference = _reference_voice_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import torchaudio as ta
 
-        model = _load_chatterbox()
+        model = _load_model()
         waveform = model.generate(text, audio_prompt_path=str(reference))
         if waveform.ndim == 1:
             waveform = waveform.unsqueeze(0)
@@ -76,11 +69,22 @@ def _generate_chatterbox_voice(text: str, output_path: Path) -> None:
             ta.save(str(wav_path), waveform.detach().cpu(), model.sr)
             completed = subprocess.run(
                 [
-                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                    "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2",
+                    "ffmpeg",
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(wav_path),
+                    "-codec:a",
+                    "libmp3lame",
+                    "-q:a",
+                    "2",
                     str(output_path),
                 ],
-                check=False, capture_output=True, text=True,
+                check=False,
+                capture_output=True,
+                text=True,
             )
             if completed.returncode:
                 raise TTSError(completed.stderr.strip() or "ffmpeg could not encode the generated voice as MP3.")
@@ -88,15 +92,3 @@ def _generate_chatterbox_voice(text: str, output_path: Path) -> None:
         raise
     except Exception as exc:
         raise TTSError(f"Local voice generation failed: {exc}") from exc
-
-
-def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
-    """Create one MP3; Google gTTS is the memory-safe deployment default."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    provider = os.getenv("TTS_PROVIDER", "google").strip().lower()
-    if provider in {"google", "gtts"}:
-        _generate_google_voice(text, output_path, language)
-    elif provider in {"chatterbox", "local"}:
-        _generate_chatterbox_voice(text, output_path)
-    else:
-        raise TTSError(f"Unknown TTS_PROVIDER {provider!r}; use google or chatterbox.")
