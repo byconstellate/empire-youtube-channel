@@ -72,7 +72,7 @@ def caption_filter(
     return (
         f"drawtext={prefix}textfile='{path}':"
         f"fontcolor={text_color}:fontsize=52:borderw=4:bordercolor={outline_color}:"
-        f"x=(w-text_w)/2:y={y_position}:line_spacing=12"
+        f"x=(w-text_w)/2:y={y_position}:line_spacing=12:text_align=center"
     )
 
 
