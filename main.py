@@ -21,6 +21,21 @@ from video import FFmpegError, combine_scenes, create_text_scene, create_video_s
 
 
 BACKGROUNDS = ["0xff00ff", "black", "white", "0xffffd6e9"]
+ALLOWED_COLORS = {"#000000", "#ffffff", "#00ff00", "#ff00ff"}
+DEFAULT_TEXT_COLOR = "#ff00ff"
+DEFAULT_OUTLINE_COLOR = "#ffffff"
+
+
+def scene_background(scene: dict, index: int) -> str:
+    """The background this scene will actually render with.
+
+    An explicit bg_color from the scene always wins; otherwise fall back
+    to the historical auto-cycling behavior.
+    """
+    explicit = scene.get("bg_color")
+    if explicit:
+        return explicit
+    return BACKGROUNDS[index % len(BACKGROUNDS)]
 
 
 def load_script(path: Path) -> dict:
@@ -64,7 +79,13 @@ def load_script(path: Path) -> dict:
             raise ValueError(f'Scene {index} show_text must be true or false.')
         if scene.get("text_position", VIDEO_TEXT_POSITION) not in {"middle", "bottom"}:
             raise ValueError(f'Scene {index} text_position must be "middle" or "bottom."')
-        background = BACKGROUNDS[(index - 1) % len(BACKGROUNDS)]
+        if scene.get("text_color", DEFAULT_TEXT_COLOR) not in ALLOWED_COLORS:
+            raise ValueError(f'Scene {index} text_color must be one of {sorted(ALLOWED_COLORS)}.')
+        if scene.get("outline_color", DEFAULT_OUTLINE_COLOR) not in ALLOWED_COLORS:
+            raise ValueError(f'Scene {index} outline_color must be one of {sorted(ALLOWED_COLORS)}.')
+        if "bg_color" in scene and scene["bg_color"] and scene["bg_color"] not in ALLOWED_COLORS:
+            raise ValueError(f'Scene {index} bg_color must be one of {sorted(ALLOWED_COLORS)}.')
+        background = scene_background(scene, index - 1)
         if background == previous_background:
             raise ValueError("Text scene backgrounds must not repeat consecutively.")
         previous_background = background
@@ -112,6 +133,8 @@ def process(script: dict) -> Path:
         duration = float(scene["duration_seconds"])
         audio_path = audio_paths[scene_id]
         scene_path = scenes_dir / f"scene_{scene_id}.mp4"
+        text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
+        outline_color = scene.get("outline_color", DEFAULT_OUTLINE_COLOR)
 
         if scene["scene_type"] in {"video", "gif"}:
             selected_video = scene.get("selected_video")
@@ -131,10 +154,31 @@ def process(script: dict) -> Path:
                     selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
             footage_path = footage_dir / f"scene_{scene_id}.mp4"
             download_video(selected, footage_path)
-            create_video_scene(footage_path, audio_path, scene["text"], duration, scene_path, pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION), pan_region=scene.get("pan_region", VIDEO_PAN_REGION), text_position=scene.get("text_position", VIDEO_TEXT_POSITION), show_text=scene.get("show_text", True))
+            create_video_scene(
+                footage_path,
+                audio_path,
+                scene["text"],
+                duration,
+                scene_path,
+                pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION),
+                pan_region=scene.get("pan_region", VIDEO_PAN_REGION),
+                text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
+                show_text=scene.get("show_text", True),
+                text_color=text_color,
+                outline_color=outline_color,
+            )
         else:
-            background = BACKGROUNDS[index % len(BACKGROUNDS)]
-            create_text_scene(audio_path, scene["text"], duration, background, scene_path, text_position=scene.get("text_position", VIDEO_TEXT_POSITION))
+            background = scene_background(scene, index)
+            create_text_scene(
+                audio_path,
+                scene["text"],
+                duration,
+                background,
+                scene_path,
+                text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
+                text_color=text_color,
+                outline_color=outline_color,
+            )
         scene_paths.append(scene_path)
 
     final_path = output_dir / "final.mp4"
