@@ -18,7 +18,15 @@ const renderHint = document.querySelector("#render-status");
 const renderPreview = document.querySelector("#render-preview");
 const renderVideo = document.querySelector("#render-video");
 const downloadButton = document.querySelector("#download-button");
-const audioToggle = document.querySelector("#audio-enabled");
+let audioToggle = document.querySelector("#audio-enabled");
+if (!audioToggle) {
+  const audioControl = document.createElement("label");
+  audioControl.className = "audio-toggle";
+  audioControl.htmlFor = "audio-enabled";
+  audioControl.innerHTML = `<input id="audio-enabled" type="checkbox" /><span class="audio-toggle-copy"><strong>Include audio narration</strong><small>Turn off to skip TTS and render a silent MP4.</small></span><span class="audio-toggle-switch" aria-hidden="true"></span>`;
+  document.querySelector(".voice-panel .voice-note")?.before(audioControl);
+  audioToggle = audioControl.querySelector("#audio-enabled");
+}
 let renderedVideoUrl = "";
 renderButton.innerHTML = "Export MP4 <span>→</span>";
 if (renderHint) renderHint.textContent = "Review your scenes and footage, then render the finished video.";
