@@ -65,8 +65,8 @@ def load_script(path: Path) -> dict:
             duration = float(scene["duration_seconds"])
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Scene {index} duration must be a number.") from exc
-        if duration <= 0 or duration > 3660:
-            raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 60 seconds.")
+        if duration <= 0 or duration > 3600:
+            raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 3600 seconds (60 minutes).")
         if scene["scene_type"] not in {"video", "gif", "text"}:
             raise ValueError(f'Scene {index} scene_type must be "video", "gif", or "text".')
         if scene["scene_type"] in {"video", "gif"} and not scene.get("search_query"):
@@ -107,10 +107,6 @@ def process(script: dict) -> Path:
     audio_enabled = script.get("audio_enabled", True)
     audio_paths: dict[str, Path | None] = {}
     if audio_enabled:
-        # Pass 1: generate every scene's narration first, while the Pocket TTS model
-        # is loaded. Doing this up front (instead of interleaved with ffmpeg encoding)
-        # means we can fully unload the model before the memory-heavy video work
-        # starts, so the two never compete for RAM at the same time.
         for scene in script["scenes"]:
             scene_id = str(scene["scene_id"])
             audio_path = audio_dir / f"scene_{scene_id}.mp3"
@@ -125,8 +121,6 @@ def process(script: dict) -> Path:
         for scene in script["scenes"]:
             audio_paths[str(scene["scene_id"])] = None
 
-    # Pass 2: download footage and run ffmpeg for each scene, now that the
-    # torch model's memory has been freed.
     scene_paths: list[Path] = []
     for index, scene in enumerate(script["scenes"]):
         scene_id = str(scene["scene_id"])
