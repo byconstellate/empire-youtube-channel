@@ -1,4 +1,4 @@
-"""Local voice-cloning TTS using the open-source Chatterbox model."""
+"""Local voice-cloning TTS using Kyutai's Pocket TTS model."""
 
 import os
 import subprocess
@@ -13,6 +13,7 @@ class TTSError(RuntimeError):
 
 DEFAULT_REFERENCE_VOICE = Path(__file__).resolve().with_name("reference_voice.wav")
 _model = None
+_voice_state = None
 _model_lock = threading.Lock()
 
 
@@ -29,50 +30,46 @@ def _reference_voice_path() -> Path:
     return reference
 
 
-def _load_model():
-    global _model
-    if _model is not None:
-        return _model
-    with _model_lock:
-        if _model is not None:
-            return _model
-        try:
-            import torch
-            thread_count = int(os.getenv("TORCH_NUM_THREADS", "1"))
-            torch.set_num_threads(thread_count)
-            try:
-                torch.set_num_interop_threads(thread_count)
-            except RuntimeError:
-                pass
-            from chatterbox.tts_turbo import ChatterboxTurboTTS
+def _load_model_and_voice():
+    """Load the Pocket TTS model and the cloned voice state once, then reuse them.
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            # Nano keeps local CPU deployments practical while retaining zero-shot cloning.
-            _model = ChatterboxTurboTTS.from_pretrained(device=device, nano=True)
+    Both operations are relatively slow, so we cache them process-wide instead of
+    repeating the work on every render, per Pocket TTS's own recommendation.
+    """
+    global _model, _voice_state
+    if _model is not None and _voice_state is not None:
+        return _model, _voice_state
+    with _model_lock:
+        if _model is not None and _voice_state is not None:
+            return _model, _voice_state
+        try:
+            from pocket_tts import TTSModel
+
+            reference = _reference_voice_path()
+            _model = TTSModel.load_model()
+            _voice_state = _model.get_state_for_audio_prompt(str(reference))
         except Exception as exc:
-            raise TTSError(f"Could not load the local Chatterbox voice model: {exc}") from exc
-    return _model
+            raise TTSError(f"Could not load the local Pocket TTS voice model: {exc}") from exc
+    return _model, _voice_state
 
 
 def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
-    """Create one MP3 using the bundled reference voice and local Chatterbox.
+    """Create one MP3 using the bundled reference voice and local Pocket TTS.
 
     The language argument remains part of the public interface for compatibility
-    with the existing renderer; Chatterbox Turbo Nano is the English voice model.
+    with the existing renderer; Pocket TTS clones the voice from the reference
+    audio rather than switching models per language.
     """
     del language
-    reference = _reference_voice_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        import torchaudio as ta
+        import scipy.io.wavfile
 
-        model = _load_model()
-        waveform = model.generate(text, audio_prompt_path=str(reference))
-        if waveform.ndim == 1:
-            waveform = waveform.unsqueeze(0)
+        model, voice_state = _load_model_and_voice()
+        audio = model.generate_audio(voice_state, text)
         with tempfile.TemporaryDirectory(prefix="empire_tts_") as temp_dir:
             wav_path = Path(temp_dir) / "voice.wav"
-            ta.save(str(wav_path), waveform.detach().cpu(), model.sr)
+            scipy.io.wavfile.write(str(wav_path), model.sample_rate, audio.detach().cpu().numpy())
             completed = subprocess.run(
                 [
                     "ffmpeg",
