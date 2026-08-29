@@ -65,7 +65,7 @@ def load_script(path: Path) -> dict:
             duration = float(scene["duration_seconds"])
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Scene {index} duration must be a number.") from exc
-        if duration <= 0 or duration > 60:
+        if duration <= 0 or duration > 3660:
             raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 60 seconds.")
         if scene["scene_type"] not in {"video", "gif", "text"}:
             raise ValueError(f'Scene {index} scene_type must be "video", "gif", or "text".')
