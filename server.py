@@ -122,7 +122,15 @@ def run_render(job_id: str, payload: dict) -> None:
       with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as script_file:
           json.dump(render_payload, script_file)
           script_path = Path(script_file.name)
-      completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True, timeout=540)
+      # A fixed 540s timeout works for short scripts but fails outright on long
+      # ones -- TTS generation, footage download, and ffmpeg encoding all scale
+      # with scene count. Give each scene a generous budget instead, with a
+      # floor matching the old fixed value so small projects are unaffected,
+      # and an env var escape hatch for full manual control.
+      scene_count = len(render_payload.get("scenes", []))
+      default_timeout = max(540, 180 + 60 * scene_count)
+      timeout_seconds = int(os.getenv("RENDER_TIMEOUT_SECONDS", str(default_timeout)))
+      completed = subprocess.run([sys.executable, "main.py", str(script_path)], capture_output=True, text=True, timeout=timeout_seconds)
       if completed.returncode != 0:
           raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "Render failed.")
       output = Path("projects") / str(render_payload["project_id"]) / "output" / "final.mp4"
