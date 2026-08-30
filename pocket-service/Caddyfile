@@ -1,0 +1,3 @@
+${TTS_DOMAIN} {
+    reverse_proxy pocket-tts:8000
+}
