@@ -1,0 +1,28 @@
+services:
+  chatterbox-tts:
+    build:
+      context: ..
+      dockerfile: chatterbox-service/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - chatterbox-tts
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
