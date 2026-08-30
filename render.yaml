@@ -13,7 +13,7 @@ services:
       - key: TTS_PROVIDER
         value: pocket_remote
       - key: TTS_SERVICE_URL
-        sync: false
+        value: https://tts.constellate.online
       - key: TTS_SERVICE_TOKEN
         sync: false
       - key: REFERENCE_VOICE_FILE
