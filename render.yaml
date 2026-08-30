@@ -11,7 +11,7 @@ services:
       - key: PEXELS_API_KEY
         sync: false
       - key: TTS_PROVIDER
-        value: pocket_remote
+        value: chatterbox_remote
       - key: TTS_SERVICE_URL
         value: https://tts.constellate.online
       - key: TTS_SERVICE_TOKEN
