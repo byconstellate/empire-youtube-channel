@@ -131,6 +131,15 @@ function formatRelativeTime(timestamp) {
   return `${days} ${days === 1 ? "day" : "days"} ago`;
 }
 
+function formatElapsedTime(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 // Upserts by project_id (editing the same project just refreshes its
 // timestamp) and only evicts the oldest *other* entry once a genuinely new
 // project pushes the list past MAX_RECENT_PROJECTS.
@@ -854,9 +863,19 @@ renderButton.addEventListener("click", async () => {
       status: "queued"
     };
 
-    for (let attempt = 0; attempt < 180; attempt += 1) {
+    // The backend has no real progress reporting (no per-scene status gets
+    // written anywhere), so a fabricated percentage would just be a guess
+    // dressed up as data. Elapsed time is the honest thing to show instead.
+    // Poll fast at first for quick renders, then back off so a long render
+    // (now allowed up to 5 days server-side) doesn't hammer the server with
+    // requests every 2 seconds for hours on end.
+    const pollStartedAt = Date.now();
+    const maxPollMs = 6 * 60 * 60 * 1000; // give up checking from this page after 6 hours
+    let pollDelayMs = 2000;
+
+    while (Date.now() - pollStartedAt < maxPollMs) {
       await new Promise((resolve) =>
-        window.setTimeout(resolve, 2000)
+        window.setTimeout(resolve, pollDelayMs)
       );
 
       const statusResponse =
@@ -886,15 +905,18 @@ renderButton.addEventListener("click", async () => {
         break;
       }
 
-      status.textContent =
-        `Rendering video… ${Math.round(
-          ((attempt + 1) / 180) * 100
-        )}%`;
+      const elapsedSeconds = Math.round((Date.now() - pollStartedAt) / 1000);
+
+      status.textContent = `Rendering video… ${formatElapsedTime(elapsedSeconds)} elapsed`;
+
+      if (elapsedSeconds > 60 && pollDelayMs < 15000) {
+        pollDelayMs = 15000;
+      }
     }
 
     if (state.status !== "complete") {
       throw new Error(
-        "Render is taking longer than expected. Check the service logs."
+        "Still rendering after 6 hours of checking from this page. Long projects can keep going on the server past that -- refresh and check back, or check the service logs."
       );
     }
 
