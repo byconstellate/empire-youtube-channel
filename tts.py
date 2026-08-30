@@ -32,6 +32,28 @@ def _reference_voice_path() -> Path:
     return reference
 
 
+def _wav_to_mp3_denoised(wav_path: Path, output_path: Path, error_hint: str) -> None:
+    """Convert a generated WAV to MP3 while reducing steady background noise.
+
+    Applies a highpass filter (removes sub-80Hz rumble/hum, well below any
+    human voice's fundamental frequency, so it doesn't touch the voice
+    itself) plus ffmpeg's FFT-based adaptive denoiser, so narration doesn't
+    carry through whatever background noise the TTS model's output has.
+    """
+    completed = subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(wav_path),
+            "-af", "highpass=f=80,afftdn=nf=-25",
+            "-codec:a", "libmp3lame", "-q:a", "2",
+            str(output_path),
+        ],
+        check=False, capture_output=True, text=True,
+    )
+    if completed.returncode:
+        raise TTSError(completed.stderr.strip() or error_hint)
+
+
 def _load_model_and_voice():
     """Load Pocket TTS and the cloned voice state once for local mode."""
     global _model, _voice_state
@@ -89,12 +111,7 @@ def _generate_chatterbox_voice(text: str, output_path: Path) -> None:
         with tempfile.TemporaryDirectory(prefix="empire_chatterbox_") as temp_dir:
             wav_path = Path(temp_dir) / "voice.wav"
             ta.save(str(wav_path), waveform.detach().cpu(), model.sr)
-            completed = subprocess.run(
-                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2", str(output_path)],
-                check=False, capture_output=True, text=True,
-            )
-            if completed.returncode:
-                raise TTSError(completed.stderr.strip() or "ffmpeg could not encode the Chatterbox audio as MP3.")
+            _wav_to_mp3_denoised(wav_path, output_path, "ffmpeg could not encode the Chatterbox audio as MP3.")
     except TTSError:
         raise
     except Exception as exc:
@@ -120,12 +137,7 @@ def _generate_remote_chatterbox_voice(text: str, output_path: Path) -> None:
         with tempfile.TemporaryDirectory(prefix="empire_remote_chatterbox_") as temp_dir:
             wav_path = Path(temp_dir) / "voice.wav"
             wav_path.write_bytes(response.content)
-            completed = subprocess.run(
-                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2", str(output_path)],
-                check=False, capture_output=True, text=True,
-            )
-            if completed.returncode:
-                raise TTSError(completed.stderr.strip() or "ffmpeg could not encode remote Chatterbox audio as MP3.")
+            _wav_to_mp3_denoised(wav_path, output_path, "ffmpeg could not encode remote Chatterbox audio as MP3.")
     except TTSError:
         raise
     except requests.RequestException as exc:
@@ -142,12 +154,7 @@ def _generate_local_pocket_voice(text: str, output_path: Path) -> None:
         with tempfile.TemporaryDirectory(prefix="empire_tts_") as temp_dir:
             wav_path = Path(temp_dir) / "voice.wav"
             scipy.io.wavfile.write(str(wav_path), model.sample_rate, audio.detach().cpu().numpy())
-            completed = subprocess.run(
-                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2", str(output_path)],
-                check=False, capture_output=True, text=True,
-            )
-            if completed.returncode:
-                raise TTSError(completed.stderr.strip() or "ffmpeg could not encode the generated voice as MP3.")
+            _wav_to_mp3_denoised(wav_path, output_path, "ffmpeg could not encode the generated voice as MP3.")
     except TTSError:
         raise
     except Exception as exc:
@@ -175,12 +182,7 @@ def _generate_remote_pocket_voice(text: str, output_path: Path) -> None:
         with tempfile.TemporaryDirectory(prefix="empire_remote_tts_") as temp_dir:
             wav_path = Path(temp_dir) / "voice.wav"
             wav_path.write_bytes(response.content)
-            completed = subprocess.run(
-                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2", str(output_path)],
-                check=False, capture_output=True, text=True,
-            )
-            if completed.returncode:
-                raise TTSError(completed.stderr.strip() or "ffmpeg could not encode remote Pocket audio as MP3.")
+            _wav_to_mp3_denoised(wav_path, output_path, "ffmpeg could not encode remote Pocket audio as MP3.")
     except TTSError:
         raise
     except requests.RequestException as exc:
