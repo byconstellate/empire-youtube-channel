@@ -91,6 +91,131 @@ function formatDuration(totalSeconds) {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
+const RECENT_PROJECTS_KEY = "empire_recent_projects";
+const MAX_RECENT_PROJECTS = 3;
+let autosaveTimer = null;
+
+function loadRecentProjects() {
+  try {
+    const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentProjects(list) {
+  try {
+    localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(list));
+  } catch {
+    // Storage full or unavailable (e.g. private browsing); autosave just
+    // silently stops working rather than breaking the rest of the app.
+  }
+}
+
+function deriveProjectLabel(script) {
+  const firstScene = script.scenes && script.scenes[0];
+  const text = firstScene && String(firstScene.text || "").trim();
+  if (text) return text.length > 60 ? `${text.slice(0, 57)}…` : text;
+  return script.project_id || "Untitled project";
+}
+
+function formatRelativeTime(timestamp) {
+  const minutes = Math.round((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"} ago`;
+}
+
+// Upserts by project_id (editing the same project just refreshes its
+// timestamp) and only evicts the oldest *other* entry once a genuinely new
+// project pushes the list past MAX_RECENT_PROJECTS.
+function upsertRecentProject(script) {
+  if (!script || !script.project_id || !Array.isArray(script.scenes) || !script.scenes.length) return;
+  const list = loadRecentProjects();
+  const existingIndex = list.findIndex((item) => item.project_id === script.project_id);
+  const entry = {
+    project_id: script.project_id,
+    label: deriveProjectLabel(script),
+    saved_at: Date.now(),
+    script
+  };
+  if (existingIndex !== -1) {
+    list[existingIndex] = entry;
+  } else {
+    list.push(entry);
+    if (list.length > MAX_RECENT_PROJECTS) {
+      list.sort((a, b) => a.saved_at - b.saved_at);
+      list.shift();
+    }
+  }
+  saveRecentProjects(list);
+  renderRecentProjectsStrip();
+}
+
+function removeRecentProject(projectId) {
+  saveRecentProjects(loadRecentProjects().filter((item) => item.project_id !== projectId));
+  renderRecentProjectsStrip();
+}
+
+function scheduleAutosave() {
+  window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => upsertRecentProject(currentScript), 400);
+}
+
+function renderRecentProjectsStrip() {
+  let strip = document.querySelector("#recent-projects-strip");
+  const list = loadRecentProjects().sort((a, b) => b.saved_at - a.saved_at);
+
+  if (!list.length) {
+    if (strip) strip.remove();
+    return;
+  }
+
+  if (!strip) {
+    strip = document.createElement("div");
+    strip.id = "recent-projects-strip";
+    strip.className = "recent-projects";
+    document.querySelector(".script-panel .panel-heading")?.after(strip);
+  }
+
+  strip.innerHTML =
+    `<small class="recent-projects-label">Resume a recent project</small>` +
+    `<div class="recent-projects-list">${list.map((item) => `
+      <div class="recent-project-card">
+        <button type="button" class="recent-project-resume" data-resume="${escapeHtml(item.project_id)}">
+          <strong>${escapeHtml(item.label)}</strong>
+          <small>${formatRelativeTime(item.saved_at)}</small>
+        </button>
+        <button type="button" class="recent-project-dismiss" data-dismiss="${escapeHtml(item.project_id)}" aria-label="Remove ${escapeHtml(item.label)} from recent projects">✕</button>
+      </div>
+    `).join("")}</div>`;
+}
+
+document.addEventListener("click", (event) => {
+  const resumeButton = event.target.closest("[data-resume]");
+  if (resumeButton) {
+    const entry = loadRecentProjects().find((item) => item.project_id === resumeButton.dataset.resume);
+    if (entry) {
+      currentScript = normalizeScript(entry.script);
+      input.value = JSON.stringify(currentScript, null, 2);
+      error.textContent = "";
+      renderScenes(currentScript);
+    }
+    return;
+  }
+  const dismissButton = event.target.closest("[data-dismiss]");
+  if (dismissButton) {
+    removeRecentProject(dismissButton.dataset.dismiss);
+  }
+});
+
+renderRecentProjectsStrip();
+
 const sampleScript = {
   project_id: "empire_youtube_channel",
   scenes: [
@@ -449,6 +574,7 @@ async function loadFootagePreviews(script, expand = false) {
       button.addEventListener("click", () => {
         scene.selected_video = candidate;
         updateScenePreview(currentScript.scenes.indexOf(scene));
+        scheduleAutosave();
 
         box.querySelectorAll(".footage-choice").forEach((item) => {
           item.classList.remove("approved");
@@ -490,6 +616,7 @@ async function loadScript() {
     error.textContent = "";
 
     renderScenes(currentScript);
+    scheduleAutosave();
 
     loadButton.innerHTML = "Script loaded ✓";
 
@@ -638,6 +765,8 @@ scenes.addEventListener("change", (event) => {
   }
 });
 
+scenes.addEventListener("change", () => scheduleAutosave());
+
 scenes.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
 
@@ -780,6 +909,7 @@ renderButton.addEventListener("click", async () => {
     }
 
     const blob = await downloadResponse.blob();
+    removeRecentProject(currentScript.project_id);
 
     if (renderedVideoUrl) {
       URL.revokeObjectURL(renderedVideoUrl);
@@ -1486,6 +1616,7 @@ lineLoadButton.addEventListener(
       error.textContent = "";
 
       renderLineBuilder();
+      scheduleAutosave();
     } catch (err) {
       error.textContent =
         err instanceof Error

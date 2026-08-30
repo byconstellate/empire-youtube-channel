@@ -1,4 +1,4 @@
 .env
 projects/
 __pycache__/
-*.pyc
+*.pycnode_modules/
