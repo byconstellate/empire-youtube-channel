@@ -275,12 +275,12 @@ let currentScript = sampleScript;
 input.value = JSON.stringify(sampleScript, null, 2);
 
 if (audioToggle) {
-  audioToggle.checked = currentScript.audio_enabled === true;
+  audioToggle.checked = currentScript.audio_enabled !== false;
 }
 
 function syncAudioToggle() {
   if (audioToggle) {
-    audioToggle.checked = currentScript.audio_enabled === true;
+    audioToggle.checked = currentScript.audio_enabled !== false;
   }
 }
 
@@ -444,7 +444,7 @@ async function readApiError(response, fallback) {
 function normalizeScript(script) {
   return {
     ...script,
-    audio_enabled: script.audio_enabled === true,
+    audio_enabled: script.audio_enabled !== false,
     scenes: script.scenes.map((scene, index) => {
       const normalized = {
         ...scene,
@@ -814,7 +814,7 @@ renderButton.addEventListener("click", async () => {
 
   title.textContent = "Creating your video";
 
-  const includeAudio = currentScript.audio_enabled === true;
+  const includeAudio = currentScript.audio_enabled !== false;
 
   status.textContent = includeAudio
     ? "Generating voice, fetching footage, and encoding a 1280 × 720 MP4…"
