@@ -189,6 +189,26 @@ def _generate_remote_pocket_voice(text: str, output_path: Path) -> None:
         raise TTSError(f"Remote Pocket TTS generation failed: {exc}") from exc
 
 
+def unload_model() -> None:
+    """Release any cached local model/voice state to free memory.
+
+    Safe to call no matter which TTS_PROVIDER is active: for a remote
+    provider there's nothing local to release, so this is effectively a
+    no-op; for a local provider (Pocket or Chatterbox) this drops whichever
+    one was actually loaded and forces garbage collection, so the model's
+    memory is freed before the memory-heavy ffmpeg encoding pass begins.
+    """
+    global _model, _voice_state, _chatterbox_model
+    with _model_lock:
+        _model = None
+        _voice_state = None
+    with _chatterbox_model_lock:
+        _chatterbox_model = None
+    import gc
+
+    gc.collect()
+
+
 def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
     """Generate narration with Chatterbox by default, or Pocket when selected."""
     del language
