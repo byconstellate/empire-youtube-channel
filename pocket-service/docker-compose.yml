@@ -1,12 +1,12 @@
 services:
   pocket-tts:
-    build: .
+    build:
+      context: ..
+      dockerfile: pocket-service/Dockerfile
     restart: unless-stopped
     env_file: .env
     expose:
       - "8000"
-    volumes:
-      - ./reference_voice.wav:/app/reference_voice.wav:ro
 
   caddy:
     image: caddy:2-alpine
