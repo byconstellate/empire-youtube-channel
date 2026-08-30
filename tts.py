@@ -100,6 +100,39 @@ def _generate_chatterbox_voice(text: str, output_path: Path) -> None:
     except Exception as exc:
         raise TTSError(f"Chatterbox voice generation failed: {exc}") from exc
 
+def _generate_remote_chatterbox_voice(text: str, output_path: Path) -> None:
+    service_url = os.getenv("TTS_SERVICE_URL", "").strip().rstrip("/")
+    service_token = os.getenv("TTS_SERVICE_TOKEN", "").strip()
+    if not service_url or not service_token:
+        raise TTSError("TTS_SERVICE_URL and TTS_SERVICE_TOKEN are required for remote Chatterbox TTS.")
+    try:
+        import requests
+
+        response = requests.post(
+            f"{service_url}/synthesize",
+            headers={"X-TTS-Token": service_token},
+            json={"text": text},
+            timeout=300,
+        )
+        response.raise_for_status()
+        if not response.content:
+            raise TTSError("Remote Chatterbox returned an empty audio response.")
+        with tempfile.TemporaryDirectory(prefix="empire_remote_chatterbox_") as temp_dir:
+            wav_path = Path(temp_dir) / "voice.wav"
+            wav_path.write_bytes(response.content)
+            completed = subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-q:a", "2", str(output_path)],
+                check=False, capture_output=True, text=True,
+            )
+            if completed.returncode:
+                raise TTSError(completed.stderr.strip() or "ffmpeg could not encode remote Chatterbox audio as MP3.")
+    except TTSError:
+        raise
+    except requests.RequestException as exc:
+        raise TTSError(f"Remote Chatterbox request failed: {exc}") from exc
+    except Exception as exc:
+        raise TTSError(f"Remote Chatterbox generation failed: {exc}") from exc
+
 def _generate_local_pocket_voice(text: str, output_path: Path) -> None:
     try:
         import scipy.io.wavfile
@@ -160,12 +193,14 @@ def generate_voice(text: str, output_path: Path, language: str = "en") -> None:
     """Generate narration with Chatterbox by default, or Pocket when selected."""
     del language
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    provider = os.getenv("TTS_PROVIDER", "chatterbox").strip().lower()
-    if provider in {"chatterbox", "chatterbox_nano"}:
+    provider = os.getenv("TTS_PROVIDER", "chatterbox_remote").strip().lower()
+    if provider in {"chatterbox_remote", "chatterbox_http"}:
+        _generate_remote_chatterbox_voice(text, output_path)
+    elif provider in {"chatterbox", "chatterbox_nano"}:
         _generate_chatterbox_voice(text, output_path)
     elif provider in {"pocket_remote", "remote"}:
         _generate_remote_pocket_voice(text, output_path)
     elif provider in {"pocket", "local"}:
         _generate_local_pocket_voice(text, output_path)
     else:
-        raise TTSError(f"Unknown TTS_PROVIDER {provider!r}; use chatterbox, pocket_remote, or pocket.")
+        raise TTSError(f"Unknown TTS_PROVIDER {provider!r}; use chatterbox_remote, chatterbox, pocket_remote, or pocket.")
