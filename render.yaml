@@ -10,6 +10,12 @@ services:
         sync: false
       - key: PEXELS_API_KEY
         sync: false
+      - key: TTS_PROVIDER
+        value: pocket_remote
+      - key: TTS_SERVICE_URL
+        sync: false
+      - key: TTS_SERVICE_TOKEN
+        sync: false
       - key: REFERENCE_VOICE_FILE
         value: reference_voice.wav
       - key: AUTO_APPROVE_FOOTAGE
