@@ -8,12 +8,32 @@ services:
     expose:
       - "8000"
 
+  render-worker:
+    build:
+      context: ..
+      dockerfile: render-worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Docker Compose's built-in service-name DNS: this reaches pocket-tts
+      # over the internal network, no public internet round trip at all.
+      - TTS_PROVIDER=chatterbox_remote
+      - TTS_SERVICE_URL=http://pocket-tts:8000
+    depends_on:
+      - pocket-tts
+    expose:
+      - "8001"
+    volumes:
+      - render_jobs:/app/jobs
+      - render_projects:/app/projects
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     env_file: .env
     depends_on:
       - pocket-tts
+      - render-worker
     ports:
       - "80:80"
       - "443:443"
@@ -25,3 +45,5 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  render_jobs:
+  render_projects:

@@ -1,3 +1,7 @@
 ${TTS_DOMAIN} {
     reverse_proxy pocket-tts:8000
 }
+
+${RENDER_DOMAIN} {
+    reverse_proxy render-worker:8001
+}

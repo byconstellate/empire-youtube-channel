@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from config import (
@@ -87,6 +89,63 @@ def load_script(path: Path) -> dict:
     return data
 
 
+def _render_scene(index: int, scene: dict, audio_paths: dict, footage_dir: Path, scenes_dir: Path) -> tuple[int, Path]:
+    """Download footage (if needed) and encode one scene. Safe to call concurrently
+    across scenes: each writes to its own scene_id-keyed paths, and audio_paths is
+    only read here, never written (all narration was already generated beforehand)."""
+    scene_id = str(scene["scene_id"])
+    duration = float(scene["duration_seconds"])
+    audio_path = audio_paths[scene_id]
+    scene_path = scenes_dir / f"scene_{scene_id}.mp4"
+    text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
+    outline_color = scene.get("outline_color", DEFAULT_OUTLINE_COLOR)
+
+    if scene["scene_type"] in {"video", "gif"}:
+        selected_video = scene.get("selected_video")
+        if isinstance(selected_video, dict) and selected_video.get("video_files"):
+            print(f"Using approved footage for scene {scene_id}...")
+            selected = selected_video
+        else:
+            provider = "GIPHY" if scene["scene_type"] == "gif" else "Pexels"
+            query = scene["search_query"]
+            print(f'Searching {provider} for "{query}"...')
+            if scene["scene_type"] == "gif":
+                candidates = search_gifs(GIPHY_API_KEY, scene["search_query"])
+                if not candidates:
+                    raise GiphyError(f'GIPHY returned no playable clips for "{scene["search_query"]}".')
+                selected = candidates[0]
+            else:
+                selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
+        footage_path = footage_dir / f"scene_{scene_id}.mp4"
+        download_video(selected, footage_path)
+        create_video_scene(
+            footage_path,
+            audio_path,
+            scene["text"],
+            duration,
+            scene_path,
+            pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION),
+            pan_region=scene.get("pan_region", VIDEO_PAN_REGION),
+            text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
+            show_text=scene.get("show_text", True),
+            text_color=text_color,
+            outline_color=outline_color,
+        )
+    else:
+        background = scene_background(scene, index)
+        create_text_scene(
+            audio_path,
+            scene["text"],
+            duration,
+            background,
+            scene_path,
+            text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
+            text_color=text_color,
+            outline_color=outline_color,
+        )
+    return index, scene_path
+
+
 def process(script: dict) -> Path:
     ensure_ffmpeg()
     root = project_dir(script["project_id"])
@@ -116,59 +175,22 @@ def process(script: dict) -> Path:
         for scene in script["scenes"]:
             audio_paths[str(scene["scene_id"])] = None
 
-    scene_paths: list[Path] = []
-    for index, scene in enumerate(script["scenes"]):
-        scene_id = str(scene["scene_id"])
-        duration = float(scene["duration_seconds"])
-        audio_path = audio_paths[scene_id]
-        scene_path = scenes_dir / f"scene_{scene_id}.mp4"
-        text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
-        outline_color = scene.get("outline_color", DEFAULT_OUTLINE_COLOR)
-
-        if scene["scene_type"] in {"video", "gif"}:
-            selected_video = scene.get("selected_video")
-            if isinstance(selected_video, dict) and selected_video.get("video_files"):
-                print(f"Using approved footage for scene {scene_id}...")
-                selected = selected_video
-            else:
-                provider = "GIPHY" if scene["scene_type"] == "gif" else "Pexels"
-                query = scene["search_query"]
-                print(f'Searching {provider} for "{query}"...')
-                if scene["scene_type"] == "gif":
-                    candidates = search_gifs(GIPHY_API_KEY, scene["search_query"])
-                    if not candidates:
-                        raise GiphyError(f'GIPHY returned no playable clips for "{scene["search_query"]}".')
-                    selected = candidates[0]
-                else:
-                    selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
-            footage_path = footage_dir / f"scene_{scene_id}.mp4"
-            download_video(selected, footage_path)
-            create_video_scene(
-                footage_path,
-                audio_path,
-                scene["text"],
-                duration,
-                scene_path,
-                pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION),
-                pan_region=scene.get("pan_region", VIDEO_PAN_REGION),
-                text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
-                show_text=scene.get("show_text", True),
-                text_color=text_color,
-                outline_color=outline_color,
-            )
-        else:
-            background = scene_background(scene, index)
-            create_text_scene(
-                audio_path,
-                scene["text"],
-                duration,
-                background,
-                scene_path,
-                text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
-                text_color=text_color,
-                outline_color=outline_color,
-            )
-        scene_paths.append(scene_path)
+    # Footage download + ffmpeg encoding is independent per scene (each writes
+    # its own scene_id-keyed files), so it's safe -- and, for large scripts,
+    # much faster -- to run several scenes at once. Each ffmpeg call already
+    # runs with -threads 1 (see video.py/Dockerfile), so one worker per CPU
+    # core doesn't oversubscribe. Override with RENDER_WORKERS if needed.
+    max_workers = max(1, int(os.getenv("RENDER_WORKERS", str(os.cpu_count() or 1))))
+    results: dict[int, Path] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_render_scene, index, scene, audio_paths, footage_dir, scenes_dir): index
+            for index, scene in enumerate(script["scenes"])
+        }
+        for future in as_completed(futures):
+            index, scene_path = future.result()
+            results[index] = scene_path
+    scene_paths = [results[i] for i in range(len(script["scenes"]))]
 
     final_path = output_dir / "final.mp4"
     combine_scenes(scene_paths, final_path, root)
