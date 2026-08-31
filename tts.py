@@ -93,7 +93,7 @@ def _load_chatterbox_model():
             from chatterbox.tts_turbo import ChatterboxTurboTTS
 
             device = os.getenv("CHATTERBOX_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
-            _chatterbox_model = ChatterboxTurboTTS.from_pretrained(device=device, nano=True)
+            _chatterbox_model = ChatterboxTurboTTS.from_pretrained(device=device)
         except Exception as exc:
             raise TTSError(f"Could not load the Chatterbox voice model: {exc}") from exc
     return _chatterbox_model
