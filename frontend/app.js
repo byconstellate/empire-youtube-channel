@@ -140,6 +140,22 @@ function formatElapsedTime(totalSeconds) {
   return `${seconds}s`;
 }
 
+// A few different code paths fall back to one of a couple of generic
+// project_ids ("empire_youtube_channel", "empire_text_script") when the user
+// hasn't set their own. Since the recent-projects history is keyed by
+// project_id, two genuinely different pieces of work sharing a generic
+// default would silently overwrite each other -- which is exactly what
+// happened to a real 559-scene project. Give any script still carrying one
+// of these defaults (or none at all) a real unique id instead.
+const DEFAULT_PROJECT_IDS = new Set(["empire_youtube_channel", "empire_text_script"]);
+
+function ensureUniqueProjectId(script) {
+  if (!script.project_id || DEFAULT_PROJECT_IDS.has(script.project_id)) {
+    script.project_id = `project_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  return script;
+}
+
 // Upserts by project_id (editing the same project just refreshes its
 // timestamp) and only evicts the oldest *other* entry once a genuinely new
 // project pushes the list past MAX_RECENT_PROJECTS.
@@ -279,9 +295,9 @@ document.querySelector("#more-footage")?.remove();
 
 loadButton.innerHTML = "Load script + find more <span>→</span>";
 
-let currentScript = sampleScript;
+let currentScript = ensureUniqueProjectId({ ...sampleScript });
 
-input.value = JSON.stringify(sampleScript, null, 2);
+input.value = JSON.stringify(currentScript, null, 2);
 
 if (audioToggle) {
   audioToggle.checked = currentScript.audio_enabled !== false;
@@ -451,10 +467,11 @@ async function readApiError(response, fallback) {
 }
 
 function normalizeScript(script) {
+  const withUniqueId = ensureUniqueProjectId({ ...script });
   return {
-    ...script,
-    audio_enabled: script.audio_enabled !== false,
-    scenes: script.scenes.map((scene, index) => {
+    ...withUniqueId,
+    audio_enabled: withUniqueId.audio_enabled !== false,
+    scenes: withUniqueId.scenes.map((scene, index) => {
       const normalized = {
         ...scene,
         scene_id: String(scene.scene_id || index + 1),
@@ -1140,12 +1157,12 @@ function parseLineByLineScript() {
     }
   );
 
-  return {
+  return ensureUniqueProjectId({
     project_id:
       parsed?.project_id ||
       "empire_youtube_channel",
     scenes: normalizedScenes
-  };
+  });
 }
 
 function renderLineBuilder() {
