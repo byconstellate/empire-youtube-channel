@@ -1281,7 +1281,7 @@ function renderLineBuilder() {
   builder.className = "line-builder";
 
   builder.innerHTML =
-    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span></div><p class=\"line-builder-text\"></p><div class=\"line-builder-preview-slot\"></div><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
+    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span><button type=\"button\" class=\"line-builder-delete\" data-line-delete title=\"Delete this line\">✕ Delete line</button></div><textarea class=\"line-builder-text-input\" data-line-text rows=\"2\"></textarea><div class=\"line-builder-preview-slot\"></div><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
 
   builder
     .querySelector(".line-builder-preview-slot")
@@ -1295,9 +1295,12 @@ function renderLineBuilder() {
       " of " +
       currentScript.scenes.length;
 
-  builder
-    .querySelector(".line-builder-text")
-    .textContent = scene.text;
+  const textInput =
+    builder.querySelector(
+      "[data-line-text]"
+    );
+
+  textInput.value = scene.text;
 
   builder
     .querySelector(
@@ -1486,6 +1489,50 @@ function renderLineBuilder() {
     builder.querySelector(
       "[data-line-prev]"
     );
+
+  textInput.addEventListener("change", () => {
+    const trimmed = textInput.value.trim();
+
+    if (!trimmed) {
+      error.textContent = "A scene's text can't be empty.";
+      textInput.value = scene.text;
+      return;
+    }
+
+    error.textContent = "";
+    scene.text = trimmed;
+    textInput.value = trimmed;
+    updateScenePreview(activeLineIndex);
+    scheduleAutosave();
+  });
+
+  const deleteLineButton =
+    builder.querySelector(
+      "[data-line-delete]"
+    );
+
+  deleteLineButton.addEventListener("click", () => {
+    if (currentScript.scenes.length <= 1) {
+      error.textContent = "A script needs at least one scene.";
+      return;
+    }
+
+    const label = scene.text.slice(0, 60);
+
+    if (!window.confirm(`Delete this line ("${label}")? This can't be undone.`)) {
+      return;
+    }
+
+    currentScript.scenes.splice(activeLineIndex, 1);
+
+    if (activeLineIndex >= currentScript.scenes.length) {
+      activeLineIndex = Math.max(0, currentScript.scenes.length - 1);
+    }
+
+    error.textContent = "";
+    scheduleAutosave();
+    renderLineBuilder();
+  });
 
   const syncNextButton = () => {
     nextButton.disabled =
