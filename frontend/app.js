@@ -57,7 +57,10 @@ function updateScenePreview(index) {
   if (!box) return;
   box.setAttribute("style", scenePreviewBackgroundStyle(scene));
   const text = box.querySelector(`[data-preview-text="${index}"]`);
-  if (text) text.setAttribute("style", scenePreviewTextStyle(scene));
+  if (text) {
+    text.setAttribute("style", scenePreviewTextStyle(scene));
+    text.textContent = scene.text;
+  }
 }
 
 function scenePreviewHtml(scene, index) {
@@ -334,7 +337,21 @@ function renderScenes(script) {
       <span class="scene-number">${String(index + 1).padStart(2, "0")} </span>
 
       <div class="scene-copy">
-        <strong>${escapeHtml(scene.text)}</strong>
+        <div class="scene-copy-header">
+          <textarea
+            class="scene-text-input"
+            data-scene-text="${index}"
+            rows="2"
+            aria-label="Text for scene ${index + 1}"
+          >${escapeHtml(scene.text)}</textarea>
+          <button
+            type="button"
+            class="scene-delete"
+            data-delete-scene="${index}"
+            aria-label="Delete scene ${index + 1}"
+            title="Delete this scene"
+          >✕</button>
+        </div>
 
         <small>
           ${scene.scene_type === "text"
@@ -677,6 +694,30 @@ document.querySelector("#script-file")?.addEventListener("change", async (event)
 });
 
 scenes.addEventListener("change", (event) => {
+  const textInput = event.target.closest("textarea[data-scene-text]");
+
+  if (textInput) {
+    const index = Number(textInput.dataset.sceneText);
+    const scene = currentScript.scenes[index];
+
+    if (scene) {
+      const trimmed = textInput.value.trim();
+
+      if (!trimmed) {
+        error.textContent = "A scene's text can't be empty.";
+        textInput.value = scene.text;
+        return;
+      }
+
+      error.textContent = "";
+      scene.text = trimmed;
+      textInput.value = trimmed;
+      updateScenePreview(index);
+    }
+
+    return;
+  }
+
   const durationInput = event.target.closest("input[data-duration]");
 
   if (durationInput) {
@@ -795,6 +836,31 @@ scenes.addEventListener("change", (event) => {
 scenes.addEventListener("change", () => scheduleAutosave());
 
 scenes.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("button[data-delete-scene]");
+
+  if (deleteButton) {
+    event.preventDefault();
+
+    if (currentScript.scenes.length <= 1) {
+      error.textContent = "A script needs at least one scene.";
+      return;
+    }
+
+    const index = Number(deleteButton.dataset.deleteScene);
+    const scene = currentScript.scenes[index];
+    const label = scene ? scene.text.slice(0, 60) : "this scene";
+
+    if (!window.confirm(`Delete scene ${index + 1} ("${label}")? This can't be undone.`)) {
+      return;
+    }
+
+    currentScript.scenes.splice(index, 1);
+    error.textContent = "";
+    renderScenes(currentScript);
+    scheduleAutosave();
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
 
   if (!button) return;
