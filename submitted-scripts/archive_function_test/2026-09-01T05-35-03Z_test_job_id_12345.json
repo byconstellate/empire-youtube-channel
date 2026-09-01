@@ -1,0 +1,11 @@
+{
+  "project_id": "archive_function_test",
+  "scenes": [
+    {
+      "scene_id": "1",
+      "text": "test",
+      "scene_type": "text",
+      "duration_seconds": 1
+    }
+  ]
+}
