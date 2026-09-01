@@ -34,6 +34,45 @@ def _worker_headers() -> dict:
     return {"X-Render-Token": RENDER_WORKER_TOKEN} if RENDER_WORKER_TOKEN else {}
 
 
+# Best-effort permanent archive: every submitted script gets committed to
+# GitHub the moment a render starts, independent of localStorage, the VM, or
+# anything downstream. Opt-in -- disabled entirely unless both vars are set.
+# Never allowed to block or fail an actual render: any error here is logged
+# and swallowed, not raised.
+GITHUB_ARCHIVE_TOKEN = os.getenv("GITHUB_ARCHIVE_TOKEN", "").strip()
+GITHUB_ARCHIVE_REPO = os.getenv("GITHUB_ARCHIVE_REPO", "").strip()
+GITHUB_ARCHIVE_PATH_PREFIX = os.getenv("GITHUB_ARCHIVE_PATH_PREFIX", "submitted-scripts").strip().strip("/")
+
+
+def _archive_script_to_github(job_id: str, payload: dict) -> None:
+    if not GITHUB_ARCHIVE_TOKEN or not GITHUB_ARCHIVE_REPO:
+        return
+    import base64
+    from datetime import datetime, timezone
+
+    try:
+        project_id = str(payload.get("project_id", "unknown"))
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        path = f"{GITHUB_ARCHIVE_PATH_PREFIX}/{project_id}/{timestamp}_{job_id}.json"
+        content = base64.b64encode(json.dumps(payload, indent=2).encode("utf-8")).decode("ascii")
+        response = requests.put(
+            f"https://api.github.com/repos/{GITHUB_ARCHIVE_REPO}/contents/{path}",
+            headers={
+                "Authorization": f"Bearer {GITHUB_ARCHIVE_TOKEN}",
+                "Accept": "application/vnd.github+json",
+            },
+            json={
+                "message": f"Archive submitted script: {project_id} ({job_id})",
+                "content": content,
+            },
+            timeout=15,
+        )
+        if not response.ok:
+            app.logger.warning("Script archive to GitHub failed (%s): %s", response.status_code, response.text[:300])
+    except Exception as exc:  # noqa: BLE001 -- archival must never break a render
+        app.logger.warning("Script archive to GitHub raised: %s", exc)
+
+
 def _job_path(job_id: str) -> Path:
   return JOB_DIR / f"{job_id}.json"
 
@@ -196,6 +235,14 @@ def render():
   payload = request.get_json(silent=True)
   if not isinstance(payload, dict) or not payload.get("project_id") or not isinstance(payload.get("scenes"), list) or not payload["scenes"]:
       return jsonify(error="Request must contain a project_id and at least one scene."), 400
+
+  # Archive first, before anything else can go wrong -- this is what actually
+  # protects against losing a script, independent of whether the render
+  # itself succeeds, the worker is reachable, or localStorage gets
+  # overwritten. Runs in the background so a slow/unreachable GitHub never
+  # delays the actual render.
+  archive_id = uuid.uuid4().hex
+  threading.Thread(target=_archive_script_to_github, args=(archive_id, payload), daemon=True).start()
 
   if RENDER_WORKER_URL:
       render_payload = dict(payload)
