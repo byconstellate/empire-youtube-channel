@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -26,6 +27,25 @@ BACKGROUNDS = ["0xff00ff", "black", "white", "0xffffd6e9"]
 ALLOWED_COLORS = {"#000000", "#ffffff", "#00ff00", "#ff00ff"}
 DEFAULT_TEXT_COLOR = "#ff00ff"
 DEFAULT_OUTLINE_COLOR = "#ffffff"
+# Only used when a scene has no explicit duration AND no audio to measure
+# (audio_enabled: false with duration_seconds unset/0) -- there's no signal
+# at all to derive a length from in that case, so this is a last resort.
+FALLBACK_DURATION_SECONDS = 5.0
+
+
+def _audio_duration_seconds(path: Path) -> float | None:
+    """Measure a generated audio file's real duration via ffprobe. Returns
+    None (rather than raising) if the file is missing or ffprobe fails, so a
+    measurement problem degrades to the fallback/requested duration instead
+    of failing the whole render."""
+    try:
+        completed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, check=True,
+        )
+        return float(completed.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError, OSError):
+        return None
 
 
 def scene_background(scene: dict, index: int) -> str:
@@ -61,13 +81,16 @@ def load_script(path: Path) -> dict:
             raise ValueError(f"Scene {index} is missing: {', '.join(sorted(missing))}.")
         if not isinstance(scene["text"], str) or not scene["text"].strip():
             raise ValueError(f"Scene {index} text must be a non-empty string.")
-        scene["duration_seconds"] = scene.get("duration_seconds", 5)
+        scene["duration_seconds"] = scene.get("duration_seconds", 0)
         try:
             duration = float(scene["duration_seconds"])
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Scene {index} duration must be a number.") from exc
-        if duration <= 0 or duration > 3600:
-            raise ValueError(f"Scene {index} duration must be greater than 0 and no more than 3600 seconds (60 minutes).")
+        # 0 is a valid sentinel meaning "auto": at render time this becomes
+        # whatever the generated narration actually takes, with no fixed
+        # floor. Only reject genuinely invalid values.
+        if duration < 0 or duration > 3600:
+            raise ValueError(f"Scene {index} duration must be 0 (auto) or up to 3600 seconds (60 minutes).")
         if scene["scene_type"] not in {"video", "gif", "text"}:
             raise ValueError(f'Scene {index} scene_type must be "video", "gif", or "text".')
         if scene["scene_type"] in {"video", "gif"} and not scene.get("search_query"):
@@ -89,12 +112,23 @@ def load_script(path: Path) -> dict:
     return data
 
 
-def _render_scene(index: int, scene: dict, audio_paths: dict, footage_dir: Path, scenes_dir: Path) -> tuple[int, Path]:
+def _render_scene(index: int, scene: dict, audio_paths: dict, audio_durations: dict, footage_dir: Path, scenes_dir: Path) -> tuple[int, Path]:
     """Download footage (if needed) and encode one scene. Safe to call concurrently
     across scenes: each writes to its own scene_id-keyed paths, and audio_paths is
     only read here, never written (all narration was already generated beforehand)."""
     scene_id = str(scene["scene_id"])
-    duration = float(scene["duration_seconds"])
+    requested_duration = float(scene["duration_seconds"])  # 0 means "auto"
+    measured_duration = audio_durations.get(scene_id)
+    if measured_duration is not None:
+        # Never let a scene be shorter than its own narration -- a shorter
+        # requested duration is overridden up to match; a longer one (an
+        # intentional pause after the line finishes) is respected as-is.
+        duration = max(requested_duration, measured_duration)
+    else:
+        # No narration to measure (audio disabled, or measurement failed):
+        # fall back to whatever was requested, or a fixed default if that's
+        # also unset, since a scene needs *some* positive length either way.
+        duration = requested_duration or FALLBACK_DURATION_SECONDS
     audio_path = audio_paths[scene_id]
     scene_path = scenes_dir / f"scene_{scene_id}.mp4"
     text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
@@ -161,6 +195,7 @@ def process(script: dict, language: str | None = None) -> Path:
 
     audio_enabled = script.get("audio_enabled", True)
     audio_paths: dict[str, Path | None] = {}
+    audio_durations: dict[str, float] = {}
     if audio_enabled:
         for scene in script["scenes"]:
             scene_id = str(scene["scene_id"])
@@ -168,6 +203,9 @@ def process(script: dict, language: str | None = None) -> Path:
             print(f"\nGenerating voice for scene {scene_id}...")
             generate_voice(scene["text"], audio_path, language)
             audio_paths[scene_id] = audio_path
+            measured = _audio_duration_seconds(audio_path)
+            if measured is not None:
+                audio_durations[scene_id] = measured
 
         print("\nReleasing the voice model before encoding video...")
         unload_model()
@@ -185,7 +223,7 @@ def process(script: dict, language: str | None = None) -> Path:
     results: dict[int, Path] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_render_scene, index, scene, audio_paths, footage_dir, scenes_dir): index
+            executor.submit(_render_scene, index, scene, audio_paths, audio_durations, footage_dir, scenes_dir): index
             for index, scene in enumerate(script["scenes"])
         }
         for future in as_completed(futures):

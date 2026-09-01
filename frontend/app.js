@@ -324,7 +324,7 @@ function renderScenes(script) {
     }
 
     scene.text_position = scene.text_position === "middle" ? "middle" : "bottom";
-    scene.duration_seconds = Number(scene.duration_seconds) > 0 ? Number(scene.duration_seconds) : 5;
+    scene.duration_seconds = Number(scene.duration_seconds) > 0 ? Number(scene.duration_seconds) : 0;
 
     normalizeColors(scene);
   });
@@ -371,12 +371,13 @@ function renderScenes(script) {
         </label>
 
         <label class="scene-control">
-          Duration (mm:ss)
+          Duration (mm:ss)${scene.duration_seconds === 0 ? " — auto (matches voice)" : ""}
           <input
             type="text"
             data-duration="${index}"
             value="${formatDuration(scene.duration_seconds)}"
-            aria-label="Duration for scene ${index + 1}"
+            placeholder="0:00 = auto"
+            aria-label="Duration for scene ${index + 1}${scene.duration_seconds === 0 ? ", currently automatic, matching the voice length" : ""}"
           />
         </label>
 
@@ -476,7 +477,7 @@ function normalizeScript(script) {
         ...scene,
         scene_id: String(scene.scene_id || index + 1),
         text: String(scene.text || "").trim(),
-        duration_seconds: Number(scene.duration_seconds) || 5
+        duration_seconds: Number(scene.duration_seconds) || 0
       };
 
       if (!normalized.text) {
@@ -1092,7 +1093,7 @@ function parseLineByLineScript() {
         .map((text, index) => ({
           scene_id: String(index + 1),
           text,
-          duration_seconds: 5,
+          duration_seconds: 0,
           scene_type: "text"
         }));
 
@@ -1109,7 +1110,7 @@ function parseLineByLineScript() {
         ),
         text: String(scene.text || "").trim(),
         duration_seconds:
-          Number(scene.duration_seconds) || 5
+          Number(scene.duration_seconds) || 0
       };
 
       if (!normalized.text) {
