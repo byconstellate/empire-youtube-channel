@@ -119,23 +119,36 @@ def footage_filter(
     text_position: str = VIDEO_TEXT_POSITION,
     text_color: str = DEFAULT_TEXT_COLOR,
     outline_color: str = DEFAULT_OUTLINE_COLOR,
+    pan_mode: str = "pan",
 ) -> str:
-    """Scale footage and pan within the selected top or bottom half.
+    """Scale footage and either pan within the top/bottom half, or hold a
+    static crop at a fixed top/middle/bottom position.
 
     Pass caption_path=None to skip the text overlay entirely (e.g. when the
     scene's show_text flag is off) while keeping the pan/crop effect.
     """
-    if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
-        raise FFmpegError(
-            'VIDEO_PAN_DIRECTION must be "top_to_bottom" or "bottom_to_top".'
-        )
-    if pan_region not in {"top_50", "bottom_50"}:
-        raise FFmpegError('VIDEO_PAN_REGION must be "top_50" or "bottom_50".')
-    progress = f"t/{duration}" if pan_direction == "top_to_bottom" else f"(1-t/{duration})"
-    if pan_region == "top_50":
-        y_position = f"(ih-oh)*0.5*({progress})"
+    if pan_mode == "pan":
+        if pan_direction not in {"top_to_bottom", "bottom_to_top"}:
+            raise FFmpegError(
+                'VIDEO_PAN_DIRECTION must be "top_to_bottom" or "bottom_to_top".'
+            )
+        if pan_region not in {"top_50", "bottom_50"}:
+            raise FFmpegError('VIDEO_PAN_REGION must be "top_50" or "bottom_50".')
+        progress = f"t/{duration}" if pan_direction == "top_to_bottom" else f"(1-t/{duration})"
+        if pan_region == "top_50":
+            y_position = f"(ih-oh)*0.5*({progress})"
+        else:
+            y_position = f"(ih-oh)*(0.5+0.5*({progress}))"
+    elif pan_mode == "static_top":
+        y_position = "0"
+    elif pan_mode == "static_middle":
+        y_position = "(ih-oh)/2"
+    elif pan_mode == "static_bottom":
+        y_position = "(ih-oh)"
     else:
-        y_position = f"(ih-oh)*(0.5+0.5*({progress}))"
+        raise FFmpegError(
+            'pan_mode must be "pan", "static_top", "static_middle", or "static_bottom".'
+        )
     base = (
         f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
         f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-ow)/2:{y_position},"
@@ -158,11 +171,12 @@ def create_video_scene(
     show_text: bool = True,
     text_color: str = DEFAULT_TEXT_COLOR,
     outline_color: str = DEFAULT_OUTLINE_COLOR,
+    pan_mode: str = "pan",
 ) -> None:
     caption_path = _caption_file(text) if show_text else None
     try:
         video_filter = (
-            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position, text_color, outline_color)
+            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position, text_color, outline_color, pan_mode)
         )
         ffmpeg_args = ["-stream_loop", "-1", "-i", str(footage)]
         if audio is not None:

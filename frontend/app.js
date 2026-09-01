@@ -361,22 +361,34 @@ function renderScenes(script) {
 
         ${scenePreviewHtml(scene, index)}
 
-        ${scene.scene_type === "video" ? `
+        ${scene.scene_type !== "text" ? `
           <label class="scene-control">
-            Pan area
-            <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}">
-              <option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option>
-              <option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option>
+            Framing
+            <select data-pan-mode="${index}" aria-label="Framing for scene ${index + 1}">
+              <option value="pan" ${(!scene.pan_mode || scene.pan_mode === "pan") ? "selected" : ""}>Pan (animated)</option>
+              <option value="static_top" ${scene.pan_mode === "static_top" ? "selected" : ""}>Static — top</option>
+              <option value="static_middle" ${scene.pan_mode === "static_middle" ? "selected" : ""}>Static — middle</option>
+              <option value="static_bottom" ${scene.pan_mode === "static_bottom" ? "selected" : ""}>Static — bottom</option>
             </select>
           </label>
 
-          <label class="scene-control">
-            Pan motion
-            <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}">
-              <option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option>
-              <option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option>
-            </select>
-          </label>
+          ${(!scene.pan_mode || scene.pan_mode === "pan") ? `
+            <label class="scene-control">
+              Pan area
+              <select data-pan-region="${index}" aria-label="Pan area for scene ${index + 1}">
+                <option value="top_50" ${scene.pan_region === "top_50" ? "selected" : ""}>Top half</option>
+                <option value="bottom_50" ${scene.pan_region === "bottom_50" ? "selected" : ""}>Bottom half</option>
+              </select>
+            </label>
+
+            <label class="scene-control">
+              Pan motion
+              <select data-pan-direction="${index}" aria-label="Pan motion for scene ${index + 1}">
+                <option value="top_to_bottom" ${scene.pan_direction === "top_to_bottom" ? "selected" : ""}>Top → bottom</option>
+                <option value="bottom_to_top" ${scene.pan_direction === "bottom_to_top" ? "selected" : ""}>Bottom → top</option>
+              </select>
+            </label>
+          ` : ""}
         ` : ""}
 
         <label class="scene-control">
@@ -732,6 +744,25 @@ scenes.addEventListener("change", (event) => {
 
       scene.duration_seconds = parsed;
       durationInput.value = formatDuration(parsed);
+    }
+
+    return;
+  }
+
+  const panMode = event.target.closest("select[data-pan-mode]");
+
+  if (panMode) {
+    const scene =
+      currentScript.scenes[Number(panMode.dataset.panMode)];
+
+    if (scene) {
+      scene.pan_mode = panMode.value;
+      if (scenes.querySelector(".line-builder")) {
+        renderLineBuilder();
+      } else {
+        renderScenes(currentScript);
+      }
+      scheduleAutosave();
     }
 
     return;
@@ -1339,6 +1370,26 @@ function renderLineBuilder() {
   searchPanel.hidden = !isMedia;
 
   if (isMedia) {
+    const panModeLabel =
+      document.createElement("label");
+
+    panModeLabel.textContent =
+      "Framing";
+
+    panModeLabel.innerHTML +=
+      '<select data-pan-mode="' +
+      activeLineIndex +
+      '"><option value="pan">Pan (animated)</option><option value="static_top">Static — top</option><option value="static_middle">Static — middle</option><option value="static_bottom">Static — bottom</option></select>';
+
+    panModeLabel.querySelector(
+      "select"
+    ).value = scene.pan_mode || "pan";
+
+    grid.appendChild(panModeLabel);
+
+    const isPanMode = !scene.pan_mode || scene.pan_mode === "pan";
+
+    if (isPanMode) {
     const panRegionLabel =
       document.createElement("label");
 
@@ -1372,6 +1423,7 @@ function renderLineBuilder() {
     ).value = scene.pan_direction;
 
     grid.appendChild(panDirectionLabel);
+    }
 
     const showTextLabel =
       document.createElement("label");

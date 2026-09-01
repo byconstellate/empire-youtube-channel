@@ -99,6 +99,8 @@ def load_script(path: Path) -> dict:
             raise ValueError(f'Video scene {index} pan_region must be "top_50" or "bottom_50".')
         if scene["scene_type"] in {"video", "gif"} and scene.get("pan_direction", VIDEO_PAN_DIRECTION) not in {"top_to_bottom", "bottom_to_top"}:
             raise ValueError(f'Video scene {index} pan_direction must be "top_to_bottom" or "bottom_to_top".')
+        if scene["scene_type"] in {"video", "gif"} and scene.get("pan_mode", "pan") not in {"pan", "static_top", "static_middle", "static_bottom"}:
+            raise ValueError(f'Video scene {index} pan_mode must be "pan", "static_top", "static_middle", or "static_bottom".')
         if "show_text" in scene and not isinstance(scene["show_text"], bool):
             raise ValueError(f'Scene {index} show_text must be true or false.')
         if scene.get("text_position", VIDEO_TEXT_POSITION) not in {"middle", "bottom"}:
@@ -160,6 +162,7 @@ def _render_scene(index: int, scene: dict, audio_paths: dict, audio_durations: d
             scene_path,
             pan_direction=scene.get("pan_direction", VIDEO_PAN_DIRECTION),
             pan_region=scene.get("pan_region", VIDEO_PAN_REGION),
+            pan_mode=scene.get("pan_mode", "pan"),
             text_position=scene.get("text_position", VIDEO_TEXT_POSITION),
             show_text=scene.get("show_text", True),
             text_color=text_color,
