@@ -146,8 +146,9 @@ def _render_scene(index: int, scene: dict, audio_paths: dict, footage_dir: Path,
     return index, scene_path
 
 
-def process(script: dict) -> Path:
+def process(script: dict, language: str | None = None) -> Path:
     ensure_ffmpeg()
+    language = language or GOOGLE_TTS_LANGUAGE
     root = project_dir(script["project_id"])
     footage_dir, audio_dir, scenes_dir, output_dir = (
         root / "footage",
@@ -165,7 +166,7 @@ def process(script: dict) -> Path:
             scene_id = str(scene["scene_id"])
             audio_path = audio_dir / f"scene_{scene_id}.mp3"
             print(f"\nGenerating voice for scene {scene_id}...")
-            generate_voice(scene["text"], audio_path, GOOGLE_TTS_LANGUAGE)
+            generate_voice(scene["text"], audio_path, language)
             audio_paths[scene_id] = audio_path
 
         print("\nReleasing the voice model before encoding video...")

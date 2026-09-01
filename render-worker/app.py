@@ -45,6 +45,7 @@ JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 class RenderRequest(BaseModel):
     script: dict
+    language: str | None = None
 
 
 def _check_token(x_render_token: str | None) -> None:
@@ -87,7 +88,7 @@ def _cleanup_intermediate_files(root: Path) -> None:
         shutil.rmtree(root / name, ignore_errors=True)
 
 
-def _run_job(job_id: str, raw_script: dict) -> None:
+def _run_job(job_id: str, raw_script: dict, language: str | None) -> None:
     _write_status(job_id, status="running", started_at=time.time())
     try:
         # Validate through the same schema check used everywhere else, by
@@ -102,7 +103,7 @@ def _run_job(job_id: str, raw_script: dict) -> None:
         finally:
             temp_path.unlink(missing_ok=True)
 
-        output_path = process(script)
+        output_path = process(script, language=language)
         _cleanup_intermediate_files(project_dir(script["project_id"]))
         _write_status(job_id, status="complete", output_path=str(output_path), finished_at=time.time())
     except (ValueError, GiphyError, PexelsError, TTSError, FFmpegError) as exc:
@@ -123,7 +124,7 @@ def start_render(payload: RenderRequest, x_render_token: str | None = Header(def
     _check_token(x_render_token)
     job_id = uuid.uuid4().hex
     _write_status(job_id, status="queued", created_at=time.time())
-    thread = threading.Thread(target=_run_job, args=(job_id, payload.script), daemon=True)
+    thread = threading.Thread(target=_run_job, args=(job_id, payload.script, payload.language), daemon=True)
     thread.start()
     return {"job_id": job_id}
 

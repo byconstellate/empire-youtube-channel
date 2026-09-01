@@ -8,7 +8,8 @@ import threading
 import uuid
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_file
+import requests
+from flask import Flask, Response, jsonify, request, send_file, stream_with_context
 
 from config import GOOGLE_TTS_LANGUAGE, VIDEO_PAN_REGION
 from giphy import GiphyError, search_gifs
@@ -19,6 +20,18 @@ jobs = {}
 jobs_lock = threading.Lock()
 JOB_DIR = Path(os.getenv("RENDER_JOB_DIR", "projects/.render_jobs"))
 JOB_DIR.mkdir(parents=True, exist_ok=True)
+
+# When set, render-related requests are relayed to a persistent worker
+# (e.g. running on a VM) instead of rendering locally via subprocess. This is
+# what lets a long render survive without being killed by Render's own
+# health-check-triggered restarts -- the worker has no such restart to fight.
+# Left unset, everything falls back to the original local-subprocess behavior.
+RENDER_WORKER_URL = os.getenv("RENDER_WORKER_URL", "").strip().rstrip("/")
+RENDER_WORKER_TOKEN = os.getenv("RENDER_WORKER_TOKEN", "").strip()
+
+
+def _worker_headers() -> dict:
+    return {"X-Render-Token": RENDER_WORKER_TOKEN} if RENDER_WORKER_TOKEN else {}
 
 
 def _job_path(job_id: str) -> Path:
@@ -183,6 +196,24 @@ def render():
   payload = request.get_json(silent=True)
   if not isinstance(payload, dict) or not payload.get("project_id") or not isinstance(payload.get("scenes"), list) or not payload["scenes"]:
       return jsonify(error="Request must contain a project_id and at least one scene."), 400
+
+  if RENDER_WORKER_URL:
+      render_payload = dict(payload)
+      language = render_payload.pop("language", None)
+      try:
+          response = requests.post(
+              f"{RENDER_WORKER_URL}/render",
+              json={"script": render_payload, "language": language},
+              headers=_worker_headers(),
+              timeout=30,
+          )
+      except requests.RequestException as exc:
+          return jsonify(error=f"Could not reach the render worker: {exc}"), 502
+      if not response.ok:
+          return jsonify(error=response.text[:240] or "Render worker rejected the request."), 502
+      job_id = response.json()["job_id"]
+      return jsonify(job_id=job_id, status_url=f"/api/render/{job_id}", download_url=f"/api/render/{job_id}/download"), 202
+
   job_id = uuid.uuid4().hex
   set_job(job_id, status="queued")
   threading.Thread(target=run_render, args=(job_id, payload), daemon=True).start()
@@ -191,6 +222,17 @@ def render():
 
 @app.get("/api/render/<job_id>")
 def render_status(job_id: str):
+  if RENDER_WORKER_URL:
+      try:
+          response = requests.get(f"{RENDER_WORKER_URL}/render/{job_id}", headers=_worker_headers(), timeout=15)
+      except requests.RequestException as exc:
+          return jsonify(error=f"Could not reach the render worker: {exc}"), 502
+      if response.status_code == 404:
+          return jsonify(error="Render job not found."), 404
+      if not response.ok:
+          return jsonify(error=response.text[:240] or "Render worker error."), 502
+      return jsonify(response.json())
+
   job = get_job(job_id)
   if not job:
       return jsonify(error="Render job not found."), 404
@@ -199,6 +241,28 @@ def render_status(job_id: str):
 
 @app.get("/api/render/<job_id>/download")
 def render_download(job_id: str):
+  if RENDER_WORKER_URL:
+      try:
+          response = requests.get(
+              f"{RENDER_WORKER_URL}/render/{job_id}/download",
+              headers=_worker_headers(),
+              timeout=300,
+              stream=True,
+          )
+      except requests.RequestException as exc:
+          return jsonify(error=f"Could not reach the render worker: {exc}"), 502
+      if response.status_code == 404:
+          return jsonify(error="Render job not found."), 404
+      if response.status_code == 409:
+          return jsonify(error="Render is not complete yet."), 409
+      if not response.ok:
+          return jsonify(error="Render worker could not provide the file."), 502
+      return Response(
+          stream_with_context(response.iter_content(chunk_size=1024 * 1024)),
+          mimetype="video/mp4",
+          headers={"Content-Disposition": 'attachment; filename="empire_video.mp4"'},
+      )
+
   job = get_job(job_id)
   if not job:
       return jsonify(error="Render job not found."), 404
