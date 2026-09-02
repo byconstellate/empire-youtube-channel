@@ -31,6 +31,43 @@ from tts import TTSError
 from video import FFmpegError
 
 app = FastAPI(title="Empire Render Worker")
+
+
+@app.on_event("startup")
+def _mark_orphaned_jobs_failed() -> None:
+    """A job left as 'queued' or 'running' when this process starts can only
+    mean one thing: the previous process instance died (container restart,
+    crash, etc.) with that job's background thread still in flight -- there
+    is no other way a job's status stops updating. Left alone, the job file
+    would say 'running' forever with nothing left alive to ever finish it,
+    which is silently misleading rather than just unfinished. Mark these
+    honestly as failed instead, so a client polling for status gets a real
+    answer instead of an indefinite false 'running'.
+
+    This does NOT touch any of the actual per-scene files on disk (audio,
+    footage, encoded clips) -- those persist regardless, so process()'s own
+    resume logic can still reuse them if the same project is submitted
+    again.
+    """
+    for job_file in JOBS_DIR.glob("*.json"):
+        try:
+            data = json.loads(job_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("status") in ("queued", "running"):
+            job_id = job_file.stem
+            logger.warning("Marking orphaned job %s (was '%s') as failed on startup", job_id, data.get("status"))
+            _write_status(
+                job_id,
+                status="failed",
+                error=(
+                    "The render worker restarted while this job was in progress, so it never "
+                    "finished. Any narration or footage already generated is still saved on "
+                    "disk -- resubmitting the same script will pick up where this left off "
+                    "instead of starting over."
+                ),
+                finished_at=time.time(),
+            )
 logger = logging.getLogger(__name__)
 
 # Auth is optional, same pattern as the TTS service: enforced if

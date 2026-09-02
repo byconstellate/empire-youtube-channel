@@ -49,6 +49,22 @@ def _audio_duration_seconds(path: Path) -> float | None:
         return None
 
 
+def _is_reusable_media_file(path: Path) -> bool:
+    """True if path exists and ffprobe can read a real duration from it --
+    i.e. it's a complete, non-corrupt file safe to reuse rather than
+    regenerate. Works for audio or video; ffprobe doesn't care which.
+
+    This matters for resuming an interrupted render: a file that's zero
+    bytes or truncated (e.g. the process was killed mid-write, as happens
+    if the render-worker container restarts mid-job) must NOT be silently
+    trusted as already-done -- that would leave a broken clip baked into
+    the final video with no error ever raised.
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    return _audio_duration_seconds(path) is not None
+
+
 def scene_background(scene: dict, index: int) -> str:
     """The background this scene will actually render with.
 
@@ -152,6 +168,19 @@ def _render_scene(
     text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
     outline_color = scene.get("outline_color", DEFAULT_OUTLINE_COLOR)
 
+    if _is_reusable_media_file(scene_path):
+        # Already fully encoded from an earlier, interrupted attempt at this
+        # same project_id -- reuse it as-is rather than redoing the (often
+        # much slower) footage download + encode work. Still report progress
+        # for it so the counts reflect true total completion, not just work
+        # done in this particular run.
+        print(f"Reusing already-encoded scene {scene_id} (resuming)...")
+        if scene["scene_type"] in {"video", "gif"} and on_footage_done is not None:
+            on_footage_done()
+        if on_encoded_done is not None:
+            on_encoded_done()
+        return index, scene_path
+
     if scene["scene_type"] in {"video", "gif"}:
         selected_video = scene.get("selected_video")
         if isinstance(selected_video, dict) and selected_video.get("video_files"):
@@ -169,7 +198,10 @@ def _render_scene(
             else:
                 selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
         footage_path = footage_dir / f"scene_{scene_id}.mp4"
-        download_video(selected, footage_path)
+        if _is_reusable_media_file(footage_path):
+            print(f"Reusing already-downloaded footage for scene {scene_id} (resuming)...")
+        else:
+            download_video(selected, footage_path)
         if on_footage_done is not None:
             on_footage_done()
         create_video_scene(
@@ -256,8 +288,11 @@ def process(script: dict, language: str | None = None, on_progress=None) -> Path
         for scene in script["scenes"]:
             scene_id = str(scene["scene_id"])
             audio_path = audio_dir / f"scene_{scene_id}.mp3"
-            print(f"\nGenerating voice for scene {scene_id}...")
-            generate_voice(scene["text"], audio_path, language)
+            if _is_reusable_media_file(audio_path):
+                print(f"Reusing existing narration for scene {scene_id} (resuming)...")
+            else:
+                print(f"\nGenerating voice for scene {scene_id}...")
+                generate_voice(scene["text"], audio_path, language)
             audio_paths[scene_id] = audio_path
             measured = _audio_duration_seconds(audio_path)
             if measured is not None:
