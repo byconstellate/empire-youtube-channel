@@ -159,6 +159,26 @@ def footage_filter(
     return f"{base},{caption_filter(caption_path, text_position, text_color, outline_color)}"
 
 
+def _frame_quantized_duration(duration: float, fps: int = VIDEO_FPS) -> float:
+    """The exact duration a video track will actually have once encoded at
+    fps: a whole number of frames, so there's no such thing as a partial
+    frame. Rounds to the NEAREST frame boundary (not floor), so on average
+    this is only off from the requested duration by half a frame either
+    way, rather than always shrinking it.
+
+    This value must be used for BOTH the video cutoff and the audio padding
+    target for a scene -- using the raw, un-quantized `duration` for audio
+    while video silently quantizes down to the nearest frame is exactly
+    what causes video to end up a fraction of a frame shorter than audio,
+    scene after scene. Individually that's imperceptible (tens of
+    milliseconds), but concatenated across hundreds of scenes with no
+    re-sync in between, it accumulates linearly into seconds of real,
+    audible drift.
+    """
+    frame_count = max(1, round(duration * fps))
+    return frame_count / fps
+
+
 def create_video_scene(
     footage: Path,
     audio: Path | None,
@@ -175,8 +195,9 @@ def create_video_scene(
 ) -> None:
     caption_path = _caption_file(text) if show_text else None
     try:
+        exact_duration = _frame_quantized_duration(duration)
         video_filter = (
-            footage_filter(text, duration, pan_direction, pan_region, caption_path, text_position, text_color, outline_color, pan_mode)
+            footage_filter(text, exact_duration, pan_direction, pan_region, caption_path, text_position, text_color, outline_color, pan_mode)
         )
         ffmpeg_args = ["-stream_loop", "-1", "-i", str(footage)]
         if audio is not None:
@@ -184,7 +205,7 @@ def create_video_scene(
         ffmpeg_args.extend(
             [
                 "-t",
-                str(duration),
+                str(exact_duration),
                 "-vf",
                 video_filter,
                 "-r",
@@ -199,7 +220,7 @@ def create_video_scene(
                     "-map",
                     "1:a:0",
                     "-af",
-                    f"apad=whole_dur={duration}",
+                    f"apad=whole_dur={exact_duration},atrim=duration={exact_duration}",
                     "-c:a",
                     "aac",
                     "-shortest",
@@ -238,6 +259,7 @@ def create_text_scene(
 ) -> None:
     caption_path = _caption_file(text)
     try:
+        exact_duration = _frame_quantized_duration(duration)
         video_filter = caption_filter(caption_path, text_position, text_color, outline_color)
         ffmpeg_args = [
             "-f",
@@ -247,14 +269,14 @@ def create_text_scene(
         ]
         if audio is not None:
             ffmpeg_args.extend(["-i", str(audio)])
-        ffmpeg_args.extend(["-t", str(duration), "-vf", video_filter, "-map", "0:v:0"])
+        ffmpeg_args.extend(["-t", str(exact_duration), "-vf", video_filter, "-map", "0:v:0"])
         if audio is not None:
             ffmpeg_args.extend(
                 [
                     "-map",
                     "1:a:0",
                     "-af",
-                    f"apad=whole_dur={duration}",
+                    f"apad=whole_dur={exact_duration},atrim=duration={exact_duration}",
                     "-c:a",
                     "aac",
                     "-shortest",
@@ -294,8 +316,22 @@ def combine_scenes(scene_paths: list[Path], output: Path, work_dir: Path) -> Non
             "0",
             "-i",
             str(concat_file),
-            "-c",
+            "-c:v",
             "copy",
+            # Video stays a fast stream copy (unaffected, and this is the
+            # expensive part of the file). Audio is re-encoded as ONE
+            # continuous stream instead of also being copied: AAC encodes in
+            # fixed 1024-sample frames and pads the last partial frame of
+            # EVERY independently-encoded scene with a little trailing
+            # silence, regardless of how precisely the input was trimmed.
+            # Individually that's a few tens of milliseconds -- harmless.
+            # Copied verbatim across ~460 independently-encoded scenes with
+            # no re-sync in between, it accumulates linearly into seconds of
+            # real, audible drift by the end of a long video. Encoding audio
+            # once, continuously, here removes those ~460 internal
+            # boundaries entirely.
+            "-c:a",
+            "aac",
             str(output),
         ]
     )
