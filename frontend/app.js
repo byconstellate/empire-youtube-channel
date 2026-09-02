@@ -143,6 +143,32 @@ function formatElapsedTime(totalSeconds) {
   return `${seconds}s`;
 }
 
+// Each phase (voice, footage, encoding) counts as an equal third of overall
+// progress. A phase with a total of 0 (e.g. no footage needed for an
+// all-text script) is treated as already complete for that phase, rather
+// than dragging the average down for something that was never applicable.
+function computeOverallProgress(state) {
+  const phases = [
+    [state.audio_done, state.audio_total],
+    [state.footage_done, state.footage_total],
+    [state.encoded_done, state.encoded_total],
+  ];
+  const fractions = phases.map(([done, total]) => {
+    if (!total) return 1;
+    return Math.min(1, done / total);
+  });
+  const overall = fractions.reduce((a, b) => a + b, 0) / fractions.length;
+  return Math.round(overall * 100);
+}
+
+function formatProgressDetail(state) {
+  const parts = [];
+  if (state.audio_total) parts.push(`Voice ${state.audio_done}/${state.audio_total}`);
+  if (state.footage_total) parts.push(`Footage ${state.footage_done}/${state.footage_total}`);
+  if (state.encoded_total) parts.push(`Encoding ${state.encoded_done}/${state.encoded_total}`);
+  return parts.join(" · ");
+}
+
 // A few different code paths fall back to one of a couple of generic
 // project_ids ("empire_youtube_channel", "empire_text_script") when the user
 // hasn't set their own. Since the recent-projects history is keyed by
@@ -978,12 +1004,11 @@ renderButton.addEventListener("click", async () => {
       status: "queued"
     };
 
-    // The backend has no real progress reporting (no per-scene status gets
-    // written anywhere), so a fabricated percentage would just be a guess
-    // dressed up as data. Elapsed time is the honest thing to show instead.
-    // Poll fast at first for quick renders, then back off so a long render
-    // (now allowed up to 5 days server-side) doesn't hammer the server with
-    // requests every 2 seconds for hours on end.
+    // The worker tracks real per-scene progress (voice/footage/encoding
+    // counts), persisted to the job's status file as it happens -- not a
+    // fabricated percentage. Poll fast at first for quick renders, then
+    // back off so a long render (now allowed up to 5 days server-side)
+    // doesn't hammer the server with requests every 2 seconds for hours.
     const pollStartedAt = Date.now();
     const maxPollMs = 6 * 60 * 60 * 1000; // give up checking from this page after 6 hours
     let pollDelayMs = 2000;
@@ -1021,8 +1046,12 @@ renderButton.addEventListener("click", async () => {
       }
 
       const elapsedSeconds = Math.round((Date.now() - pollStartedAt) / 1000);
+      const overallPct = computeOverallProgress(state);
+      const detail = formatProgressDetail(state);
 
-      status.textContent = `Rendering video… ${formatElapsedTime(elapsedSeconds)} elapsed`;
+      status.textContent = detail
+        ? `Rendering video… ${overallPct}% — ${detail} — ${formatElapsedTime(elapsedSeconds)} elapsed`
+        : `Rendering video… ${formatElapsedTime(elapsedSeconds)} elapsed`;
 
       if (elapsedSeconds > 60 && pollDelayMs < 15000) {
         pollDelayMs = 15000;
