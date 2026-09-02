@@ -103,7 +103,11 @@ def _run_job(job_id: str, raw_script: dict, language: str | None) -> None:
         finally:
             temp_path.unlink(missing_ok=True)
 
-        output_path = process(script, language=language)
+        output_path = process(
+            script,
+            language=language,
+            on_progress=lambda snapshot: _write_status(job_id, **snapshot),
+        )
         _cleanup_intermediate_files(project_dir(script["project_id"]))
         _write_status(job_id, status="complete", output_path=str(output_path), finished_at=time.time())
     except (ValueError, GiphyError, PexelsError, TTSError, FFmpegError) as exc:
@@ -135,7 +139,16 @@ def render_status(job_id: str, x_render_token: str | None = Header(default=None)
     data = _read_status(job_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Unknown job_id")
-    return {"status": data.get("status"), "error": data.get("error")}
+    return {
+        "status": data.get("status"),
+        "error": data.get("error"),
+        "audio_done": data.get("audio_done"),
+        "audio_total": data.get("audio_total"),
+        "footage_done": data.get("footage_done"),
+        "footage_total": data.get("footage_total"),
+        "encoded_done": data.get("encoded_done"),
+        "encoded_total": data.get("encoded_total"),
+    }
 
 
 @app.get("/render/{job_id}/download")

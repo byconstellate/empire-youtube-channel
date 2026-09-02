@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -114,10 +115,25 @@ def load_script(path: Path) -> dict:
     return data
 
 
-def _render_scene(index: int, scene: dict, audio_paths: dict, audio_durations: dict, footage_dir: Path, scenes_dir: Path) -> tuple[int, Path]:
+def _render_scene(
+    index: int,
+    scene: dict,
+    audio_paths: dict,
+    audio_durations: dict,
+    footage_dir: Path,
+    scenes_dir: Path,
+    on_footage_done=None,
+    on_encoded_done=None,
+) -> tuple[int, Path]:
     """Download footage (if needed) and encode one scene. Safe to call concurrently
     across scenes: each writes to its own scene_id-keyed paths, and audio_paths is
-    only read here, never written (all narration was already generated beforehand)."""
+    only read here, never written (all narration was already generated beforehand).
+
+    on_footage_done() is called once footage is downloaded (video/gif scenes only;
+    never called for text scenes, which have no footage step). on_encoded_done() is
+    called once the scene's clip is fully encoded (all scene types). Both callbacks
+    must be safe to call from multiple threads at once.
+    """
     scene_id = str(scene["scene_id"])
     requested_duration = float(scene["duration_seconds"])  # 0 means "auto"
     measured_duration = audio_durations.get(scene_id)
@@ -154,6 +170,8 @@ def _render_scene(index: int, scene: dict, audio_paths: dict, audio_durations: d
                 selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
         footage_path = footage_dir / f"scene_{scene_id}.mp4"
         download_video(selected, footage_path)
+        if on_footage_done is not None:
+            on_footage_done()
         create_video_scene(
             footage_path,
             audio_path,
@@ -180,10 +198,22 @@ def _render_scene(index: int, scene: dict, audio_paths: dict, audio_durations: d
             text_color=text_color,
             outline_color=outline_color,
         )
+    if on_encoded_done is not None:
+        on_encoded_done()
     return index, scene_path
 
 
-def process(script: dict, language: str | None = None) -> Path:
+def process(script: dict, language: str | None = None, on_progress=None) -> Path:
+    """Render a script to a final MP4.
+
+    on_progress, if given, is called with a dict snapshot of progress counts
+    whenever any count changes:
+      {"audio_done": int, "audio_total": int,
+       "footage_done": int, "footage_total": int,
+       "encoded_done": int, "encoded_total": int}
+    Called synchronously from whichever thread just made progress, so it must
+    be cheap and thread-safe (e.g. writing a small status file under a lock).
+    """
     ensure_ffmpeg()
     language = language or GOOGLE_TTS_LANGUAGE
     root = project_dir(script["project_id"])
@@ -197,6 +227,29 @@ def process(script: dict, language: str | None = None) -> Path:
         directory.mkdir(parents=True, exist_ok=True)
 
     audio_enabled = script.get("audio_enabled", True)
+    total_scenes = len(script["scenes"])
+    footage_total = sum(1 for s in script["scenes"] if s["scene_type"] in {"video", "gif"})
+    counts = {
+        "audio_done": 0,
+        "audio_total": total_scenes if audio_enabled else 0,
+        "footage_done": 0,
+        "footage_total": footage_total,
+        "encoded_done": 0,
+        "encoded_total": total_scenes,
+    }
+    counts_lock = threading.Lock()
+
+    def _bump(key: str) -> None:
+        if on_progress is None:
+            return
+        with counts_lock:
+            counts[key] += 1
+            snapshot = dict(counts)
+        on_progress(snapshot)
+
+    if on_progress is not None:
+        on_progress(dict(counts))
+
     audio_paths: dict[str, Path | None] = {}
     audio_durations: dict[str, float] = {}
     if audio_enabled:
@@ -209,6 +262,7 @@ def process(script: dict, language: str | None = None) -> Path:
             measured = _audio_duration_seconds(audio_path)
             if measured is not None:
                 audio_durations[scene_id] = measured
+            _bump("audio_done")
 
         print("\nReleasing the voice model before encoding video...")
         unload_model()
@@ -226,7 +280,17 @@ def process(script: dict, language: str | None = None) -> Path:
     results: dict[int, Path] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_render_scene, index, scene, audio_paths, audio_durations, footage_dir, scenes_dir): index
+            executor.submit(
+                _render_scene,
+                index,
+                scene,
+                audio_paths,
+                audio_durations,
+                footage_dir,
+                scenes_dir,
+                on_footage_done=(lambda: _bump("footage_done")) if on_progress else None,
+                on_encoded_done=(lambda: _bump("encoded_done")) if on_progress else None,
+            ): index
             for index, scene in enumerate(script["scenes"])
         }
         for future in as_completed(futures):
