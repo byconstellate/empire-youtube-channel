@@ -21,6 +21,7 @@ from config import (
 )
 from giphy import GiphyError, search_gifs
 from pexels import PexelsError, choose_video, download_video, search_videos
+from youtube import YouTubeError, download_youtube_clip
 from tts import TTSError, generate_voice, unload_model
 from video import FFmpegError, combine_scenes, create_text_scene, create_video_scene, ensure_ffmpeg
 
@@ -196,9 +197,20 @@ def _render_scene(
 
     if scene["scene_type"] in {"video", "gif"}:
         selected_video = scene.get("selected_video")
-        if isinstance(selected_video, dict) and selected_video.get("video_files"):
+        footage_path = footage_dir / f"scene_{scene_id}.mp4"
+        if _is_reusable_media_file(footage_path):
+            print(f"Reusing already-downloaded footage for scene {scene_id} (resuming)...")
+        elif isinstance(selected_video, dict) and selected_video.get("provider") == "youtube":
+            print(f"Downloading YouTube clip for scene {scene_id}...")
+            download_youtube_clip(
+                selected_video["video_id"],
+                selected_video["start_seconds"],
+                selected_video["end_seconds"],
+                footage_path,
+            )
+        elif isinstance(selected_video, dict) and selected_video.get("video_files"):
             print(f"Using approved footage for scene {scene_id}...")
-            selected = selected_video
+            download_video(selected_video, footage_path)
         else:
             provider = "GIPHY" if scene["scene_type"] == "gif" else "Pexels"
             query = scene["search_query"]
@@ -210,10 +222,6 @@ def _render_scene(
                 selected = candidates[0]
             else:
                 selected = choose_video(search_videos(PEXELS_API_KEY, scene["search_query"]), scene_id)
-        footage_path = footage_dir / f"scene_{scene_id}.mp4"
-        if _is_reusable_media_file(footage_path):
-            print(f"Reusing already-downloaded footage for scene {scene_id} (resuming)...")
-        else:
             download_video(selected, footage_path)
         if on_footage_done is not None:
             on_footage_done()

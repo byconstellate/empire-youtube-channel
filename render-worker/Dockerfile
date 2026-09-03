@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # The actual render pipeline, copied flat alongside render-worker/app.py so
 # imports like `from main import process` resolve as plain same-directory
 # imports -- no sys.path tricks needed.
-COPY main.py config.py video.py tts.py pexels.py giphy.py .
+COPY main.py config.py video.py tts.py pexels.py giphy.py youtube.py .
 COPY render-worker/app.py .
 
 EXPOSE 8001
