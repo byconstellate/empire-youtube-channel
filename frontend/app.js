@@ -354,7 +354,15 @@ audioToggle?.addEventListener("change", () => {
 // with no YouTube dependency, so it's fully testable with simulated mouse
 // events on its own. onChange(startSeconds, endSeconds) fires on every drag
 // update (throttled by the browser's own mousemove rate, not artificially).
-function createTrimScrubber(container, durationSeconds, onChange) {
+function formatTimeMMSS(totalSeconds) {
+  const safe = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function createTrimScrubber(container, durationSeconds, onChange, dragCallbacks = {}) {
+  const { onDragStart, onDragEnd } = dragCallbacks;
   const MIN_GAP_SECONDS = Math.min(1, durationSeconds / 4);
   let start = 0;
   let end = durationSeconds;
@@ -371,6 +379,10 @@ function createTrimScrubber(container, durationSeconds, onChange) {
   endHandle.tabIndex = 0;
   track.append(range, startHandle, endHandle);
   container.appendChild(track);
+
+  const timesLabel = document.createElement("div");
+  timesLabel.className = "trim-times";
+  container.appendChild(timesLabel);
 
   function clamp(value) {
     return Math.max(0, Math.min(durationSeconds, value));
@@ -390,6 +402,9 @@ function createTrimScrubber(container, durationSeconds, onChange) {
     endHandle.style.left = `${endPct}%`;
     range.style.left = `${startPct}%`;
     range.style.width = `${endPct - startPct}%`;
+    timesLabel.textContent =
+      `${formatTimeMMSS(start)} \u2014 ${formatTimeMMSS(end)} ` +
+      `(${formatTimeMMSS(end - start)} clip)`;
   }
 
   function setStart(seconds) {
@@ -405,6 +420,7 @@ function createTrimScrubber(container, durationSeconds, onChange) {
   }
 
   function beginDrag(handle, onMove) {
+    if (onDragStart) onDragStart();
     const move = (event) => {
       const clientX = event.touches ? event.touches[0].clientX : event.clientX;
       onMove(pixelToSeconds(clientX));
@@ -414,6 +430,7 @@ function createTrimScrubber(container, durationSeconds, onChange) {
       document.removeEventListener("mouseup", stop);
       document.removeEventListener("touchmove", move);
       document.removeEventListener("touchend", stop);
+      if (onDragEnd) onDragEnd();
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", stop);
@@ -474,6 +491,16 @@ function createYouTubeTrimmer(container, videoId, onUseClip) {
   const playerId = `yt-player-${Math.random().toString(36).slice(2)}`;
   playerMount.id = playerId;
   playerWrap.appendChild(playerMount);
+  // A cross-origin iframe (the YouTube embed) silently swallows mouse
+  // events for anything happening over it -- once the cursor drifts over
+  // the iframe mid-drag, the page's own mousemove/mouseup listeners stop
+  // firing entirely, which looks exactly like "dragging does nothing".
+  // This shield sits on top of the iframe and is only pointer-active
+  // while a drag is in progress, so the drag keeps tracking the mouse
+  // no matter where it wanders instead of losing it to the iframe.
+  const dragShield = document.createElement("div");
+  dragShield.className = "trim-drag-shield";
+  playerWrap.appendChild(dragShield);
   container.appendChild(playerWrap);
 
   const status = document.createElement("small");
@@ -502,15 +529,41 @@ function createYouTubeTrimmer(container, videoId, onUseClip) {
       playerVars: { controls: 1, modestbranding: 1 },
       events: {
         onReady: () => {
-          const duration = player.getDuration();
-          status.textContent = `Drag the handles to trim (video is ${Math.round(duration)}s long).`;
-          scrubberContainer.style.display = "";
-          useClipButton.style.display = "";
-          scrubber = createTrimScrubber(scrubberContainer, duration, (start) => {
-            if (player && typeof player.seekTo === "function") {
-              player.seekTo(start, true);
+          const setupScrubber = (duration) => {
+            status.textContent = `Drag the handles to trim (video is ${Math.round(duration)}s long).`;
+            scrubberContainer.style.display = "";
+            useClipButton.style.display = "";
+            scrubber = createTrimScrubber(
+              scrubberContainer,
+              duration,
+              (start) => {
+                if (player && typeof player.seekTo === "function") {
+                  player.seekTo(start, true);
+                }
+              },
+              {
+                onDragStart: () => dragShield.classList.add("active"),
+                onDragEnd: () => dragShield.classList.remove("active"),
+              }
+            );
+          };
+          // getDuration() can briefly report 0 right as onReady fires,
+          // before the player has fully resolved the video's metadata --
+          // retry a few times rather than building a scrubber for a
+          // 0-second video.
+          let attempts = 0;
+          const tryGetDuration = () => {
+            const duration = player.getDuration();
+            if (duration > 0) {
+              setupScrubber(duration);
+            } else if (attempts < 10) {
+              attempts += 1;
+              setTimeout(tryGetDuration, 300);
+            } else {
+              status.textContent = "Couldn't read that video's length — try reloading the link.";
             }
-          });
+          };
+          tryGetDuration();
         },
         onError: () => {
           status.textContent = "Couldn't load that video — check the link and try again.";
