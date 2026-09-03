@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -47,6 +48,18 @@ def _audio_duration_seconds(path: Path) -> float | None:
         return float(completed.stdout.strip())
     except (subprocess.CalledProcessError, ValueError, OSError):
         return None
+
+
+def _tts_friendly_text(text: str) -> str:
+    """Convert ALL-CAPS words (2+ letters) to Title Case for the text sent to
+    TTS, so e.g. "EMPIRE" is spoken as the word "Empire" instead of being
+    spelled out letter-by-letter -- many TTS engines treat a fully
+    uppercase word as an acronym/initialism by default. This only affects
+    what gets synthesized as speech; the on-screen caption text (scene["text"]
+    itself) is never touched, so visual emphasis from using caps is
+    unaffected.
+    """
+    return re.sub(r"\b[A-Z]{2,}\b", lambda m: m.group(0).capitalize(), text)
 
 
 def _is_reusable_media_file(path: Path) -> bool:
@@ -292,7 +305,7 @@ def process(script: dict, language: str | None = None, on_progress=None) -> Path
                 print(f"Reusing existing narration for scene {scene_id} (resuming)...")
             else:
                 print(f"\nGenerating voice for scene {scene_id}...")
-                generate_voice(scene["text"], audio_path, language)
+                generate_voice(_tts_friendly_text(scene["text"]), audio_path, language)
             audio_paths[scene_id] = audio_path
             measured = _audio_duration_seconds(audio_path)
             if measured is not None:
