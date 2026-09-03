@@ -2,6 +2,14 @@ const API_BASE = (document.querySelector('meta[name="api-base"]')?.content || wi
 function apiUrl(path) { return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`; }
 function backendUnavailableMessage() { return "Media search needs the backend. GIFs use GIPHY and videos use Pexels."; }
 
+// Mirrors youtube.py's extract_video_id() exactly, so a link accepted here
+// is guaranteed to also be accepted server-side at render time.
+const YOUTUBE_ID_PATTERN = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
+function extractYouTubeVideoId(url) {
+  const match = String(url || "").match(YOUTUBE_ID_PATTERN);
+  return match ? match[1] : null;
+}
+
 const TEXT_COLOR_OPTIONS = [
   { value: "#000000", label: "Black" },
   { value: "#ffffff", label: "White" },
@@ -341,6 +349,182 @@ function syncAudioToggle() {
 audioToggle?.addEventListener("change", () => {
   currentScript.audio_enabled = audioToggle.checked;
 });
+
+// Dual-handle trim scrubber: a plain DOM range picker over [0, durationSeconds],
+// with no YouTube dependency, so it's fully testable with simulated mouse
+// events on its own. onChange(startSeconds, endSeconds) fires on every drag
+// update (throttled by the browser's own mousemove rate, not artificially).
+function createTrimScrubber(container, durationSeconds, onChange) {
+  const MIN_GAP_SECONDS = Math.min(1, durationSeconds / 4);
+  let start = 0;
+  let end = durationSeconds;
+
+  const track = document.createElement("div");
+  track.className = "trim-track";
+  const range = document.createElement("div");
+  range.className = "trim-range";
+  const startHandle = document.createElement("div");
+  startHandle.className = "trim-handle trim-handle-start";
+  startHandle.tabIndex = 0;
+  const endHandle = document.createElement("div");
+  endHandle.className = "trim-handle trim-handle-end";
+  endHandle.tabIndex = 0;
+  track.append(range, startHandle, endHandle);
+  container.appendChild(track);
+
+  function clamp(value) {
+    return Math.max(0, Math.min(durationSeconds, value));
+  }
+
+  function pixelToSeconds(clientX) {
+    const rect = track.getBoundingClientRect();
+    if (rect.width === 0) return 0;
+    const fraction = (clientX - rect.left) / rect.width;
+    return clamp(fraction * durationSeconds);
+  }
+
+  function render() {
+    const startPct = durationSeconds ? (start / durationSeconds) * 100 : 0;
+    const endPct = durationSeconds ? (end / durationSeconds) * 100 : 100;
+    startHandle.style.left = `${startPct}%`;
+    endHandle.style.left = `${endPct}%`;
+    range.style.left = `${startPct}%`;
+    range.style.width = `${endPct - startPct}%`;
+  }
+
+  function setStart(seconds) {
+    start = clamp(Math.min(seconds, end - MIN_GAP_SECONDS));
+    render();
+    onChange(start, end);
+  }
+
+  function setEnd(seconds) {
+    end = clamp(Math.max(seconds, start + MIN_GAP_SECONDS));
+    render();
+    onChange(start, end);
+  }
+
+  function beginDrag(handle, onMove) {
+    const move = (event) => {
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+      onMove(pixelToSeconds(clientX));
+    };
+    const stop = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", stop);
+      document.removeEventListener("touchmove", move);
+      document.removeEventListener("touchend", stop);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", stop);
+    document.addEventListener("touchmove", move);
+    document.addEventListener("touchend", stop);
+  }
+
+  startHandle.addEventListener("mousedown", () => beginDrag(startHandle, setStart));
+  startHandle.addEventListener("touchstart", () => beginDrag(startHandle, setStart));
+  endHandle.addEventListener("mousedown", () => beginDrag(endHandle, setEnd));
+  endHandle.addEventListener("touchstart", () => beginDrag(endHandle, setEnd));
+
+  render();
+  return {
+    getRange: () => ({ start, end }),
+    setRange: (newStart, newEnd) => {
+      start = clamp(newStart);
+      end = clamp(Math.max(newEnd, start + MIN_GAP_SECONDS));
+      render();
+      onChange(start, end);
+    },
+  };
+}
+
+// Loads the YouTube IFrame API script exactly once, however many trimmers
+// get created; resolves with the window.YT namespace once it's ready.
+let youtubeApiPromise = null;
+function loadYouTubeIframeApi() {
+  if (youtubeApiPromise) return youtubeApiPromise;
+  youtubeApiPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) {
+      resolve(window.YT);
+      return;
+    }
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === "function") previousCallback();
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
+}
+
+// Embeds a YouTube player for videoId into container, shows a trim scrubber
+// once the player reports its real duration, and calls
+// onUseClip({provider: "youtube", video_id, start_seconds, end_seconds})
+// when the user clicks "Use this clip" -- the exact shape main.py's
+// _render_scene expects for a YouTube-sourced scene.
+function createYouTubeTrimmer(container, videoId, onUseClip) {
+  container.innerHTML = "";
+
+  const playerWrap = document.createElement("div");
+  playerWrap.className = "trim-player-wrap";
+  const playerMount = document.createElement("div");
+  const playerId = `yt-player-${Math.random().toString(36).slice(2)}`;
+  playerMount.id = playerId;
+  playerWrap.appendChild(playerMount);
+  container.appendChild(playerWrap);
+
+  const status = document.createElement("small");
+  status.className = "trim-status";
+  status.textContent = "Loading video…";
+  container.appendChild(status);
+
+  const scrubberContainer = document.createElement("div");
+  scrubberContainer.className = "trim-scrubber-container";
+  scrubberContainer.style.display = "none";
+  container.appendChild(scrubberContainer);
+
+  const useClipButton = document.createElement("button");
+  useClipButton.type = "button";
+  useClipButton.className = "button button-pink trim-use-clip";
+  useClipButton.textContent = "Use this clip";
+  useClipButton.style.display = "none";
+  container.appendChild(useClipButton);
+
+  let player = null;
+  let scrubber = null;
+
+  loadYouTubeIframeApi().then((YT) => {
+    player = new YT.Player(playerId, {
+      videoId,
+      playerVars: { controls: 1, modestbranding: 1 },
+      events: {
+        onReady: () => {
+          const duration = player.getDuration();
+          status.textContent = `Drag the handles to trim (video is ${Math.round(duration)}s long).`;
+          scrubberContainer.style.display = "";
+          useClipButton.style.display = "";
+          scrubber = createTrimScrubber(scrubberContainer, duration, (start) => {
+            if (player && typeof player.seekTo === "function") {
+              player.seekTo(start, true);
+            }
+          });
+        },
+        onError: () => {
+          status.textContent = "Couldn't load that video — check the link and try again.";
+        },
+      },
+    });
+  });
+
+  useClipButton.addEventListener("click", () => {
+    if (!scrubber) return;
+    const { start, end } = scrubber.getRange();
+    onUseClip({ provider: "youtube", video_id: videoId, start_seconds: start, end_seconds: end });
+  });
+}
 
 function renderScenes(script) {
   count.textContent = `${script.scenes.length} scenes`;
@@ -1341,7 +1525,7 @@ function renderLineBuilder() {
   builder.className = "line-builder";
 
   builder.innerHTML =
-    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span><button type=\"button\" class=\"line-builder-delete\" data-line-delete title=\"Delete this line\">✕ Delete line</button></div><textarea class=\"line-builder-text-input\" data-line-text rows=\"2\"></textarea><div class=\"line-builder-preview-slot\"></div><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
+    "<div class=\"line-builder-head\"><strong>Scene setup</strong><span></span><button type=\"button\" class=\"line-builder-delete\" data-line-delete title=\"Delete this line\">✕ Delete line</button></div><textarea class=\"line-builder-text-input\" data-line-text rows=\"2\"></textarea><div class=\"line-builder-preview-slot\"></div><div class=\"line-builder-type\"><button type=\"button\" data-line-type=\"text\">Text</button><button type=\"button\" data-line-type=\"gif\">GIF</button><button type=\"button\" data-line-type=\"video\">Video</button></div><div class=\"line-builder-search\"><label>Search keyword <input type=\"search\" data-media-search placeholder=\"e.g. confident woman working\" /></label><button type=\"button\" data-search-media>Search media</button></div><div class=\"line-builder-youtube\"><label>Or paste a YouTube link <input type=\"url\" data-youtube-link placeholder=\"https://www.youtube.com/watch?v=...\" /></label><button type=\"button\" data-youtube-load>Load video</button><div class=\"line-builder-youtube-trimmer\"></div></div><div class=\"line-builder-grid\"></div><span class=\"line-builder-status\">Choose Text, GIF, or Video for this line.</span><div class=\"line-builder-actions\"><button type=\"button\" data-line-prev>← Previous line</button><button type=\"button\" class=\"primary\" data-line-next>Next line →</button></div>";
 
   builder
     .querySelector(".line-builder-preview-slot")
@@ -1379,6 +1563,29 @@ function renderLineBuilder() {
     builder.querySelector(
       ".line-builder-search"
     );
+
+  const youtubePanel =
+    builder.querySelector(
+      ".line-builder-youtube"
+    );
+
+  const youtubeLinkInput =
+    builder.querySelector(
+      "[data-youtube-link]"
+    );
+
+  const youtubeLoadButton =
+    builder.querySelector(
+      "[data-youtube-load]"
+    );
+
+  const youtubeTrimmerSlot =
+    builder.querySelector(
+      ".line-builder-youtube-trimmer"
+    );
+
+  // YouTube is only offered as a video source, not for GIF scenes.
+  youtubePanel.hidden = scene.scene_type !== "video";
 
   const searchInput =
     builder.querySelector(
@@ -1615,13 +1822,14 @@ function renderLineBuilder() {
     renderLineBuilder();
   });
 
+  const hasApprovedFootage = () =>
+    scene.selected_video &&
+    (scene.selected_video.video_files ||
+      scene.selected_video.provider === "youtube");
+
   const syncNextButton = () => {
     nextButton.disabled =
-      isMedia &&
-      !(
-        scene.selected_video &&
-        scene.selected_video.video_files
-      );
+      isMedia && !hasApprovedFootage();
   };
 
   searchButton.disabled = isMedia;
@@ -1728,6 +1936,39 @@ function renderLineBuilder() {
       if (event.key === "Enter") {
         event.preventDefault();
         searchMedia();
+      }
+    }
+  );
+
+  const loadYouTubeLink = () => {
+    const link = youtubeLinkInput.value.trim();
+    const videoId = extractYouTubeVideoId(link);
+    if (!videoId) {
+      status.textContent =
+        "That doesn't look like a YouTube link — paste a full video URL.";
+      status.classList.add("error");
+      return;
+    }
+    status.textContent = "";
+    status.classList.remove("error");
+    createYouTubeTrimmer(youtubeTrimmerSlot, videoId, (clip) => {
+      scene.selected_video = clip;
+      status.textContent = "Clip selected ✓";
+      status.classList.remove("error");
+      syncNextButton();
+      updateScenePreview(activeLineIndex);
+      scheduleAutosave();
+    });
+  };
+
+  youtubeLoadButton.addEventListener("click", loadYouTubeLink);
+
+  youtubeLinkInput.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        loadYouTubeLink();
       }
     }
   );
