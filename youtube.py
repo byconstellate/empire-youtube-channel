@@ -55,7 +55,7 @@ def download_youtube_clip(video_id: str, start_seconds: float, end_seconds: floa
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "format": "bestvideo+bestaudio/best",
         "download_ranges": yt_dlp.utils.download_range_func(None, [(start_seconds, end_seconds)]),
         "force_keyframes_at_cuts": True,
         "merge_output_format": "mp4",
