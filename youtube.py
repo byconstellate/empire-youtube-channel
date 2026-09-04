@@ -55,7 +55,15 @@ def download_youtube_clip(video_id: str, start_seconds: float, end_seconds: floa
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
-        "format": "bestvideo+bestaudio/best",
+        # Excludes HLS (m3u8) video formats specifically: confirmed directly
+        # against a real failing video that YouTube's HLS-delivered video
+        # formats break when combined with download_ranges below (a FULL
+        # download of the same HLS format works fine -- it's specifically
+        # the ranged/clipped download that fails, silently producing a
+        # file with audio but no video stream). Regular HTTP/DASH video
+        # formats (protocol^=http) don't have this problem. Audio is left
+        # unrestricted since audio-only formats aren't affected.
+        "format": "bestvideo[protocol^=http]+bestaudio/best[protocol^=http]/best",
         "download_ranges": yt_dlp.utils.download_range_func(None, [(start_seconds, end_seconds)]),
         "force_keyframes_at_cuts": True,
         "merge_output_format": "mp4",
