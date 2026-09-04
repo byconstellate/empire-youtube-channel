@@ -410,13 +410,13 @@ function createTrimScrubber(container, durationSeconds, onChange, dragCallbacks 
   function setStart(seconds) {
     start = clamp(Math.min(seconds, end - MIN_GAP_SECONDS));
     render();
-    onChange(start, end);
+    onChange(start, end, "start");
   }
 
   function setEnd(seconds) {
     end = clamp(Math.max(seconds, start + MIN_GAP_SECONDS));
     render();
-    onChange(start, end);
+    onChange(start, end, "end");
   }
 
   function beginDrag(handle, onMove) {
@@ -536,9 +536,19 @@ function createYouTubeTrimmer(container, videoId, onUseClip) {
             scrubber = createTrimScrubber(
               scrubberContainer,
               duration,
-              (start) => {
-                if (player && typeof player.seekTo === "function") {
-                  player.seekTo(start, true);
+              (start, end, which) => {
+                if (!player || typeof player.seekTo !== "function") return;
+                // Seek to whichever handle actually moved -- previously this
+                // always seeked to `start`, so dragging the end handle
+                // correctly updated its position and the time label, but
+                // the video preview never moved, making it look like that
+                // handle "did nothing".
+                const target = which === "end" ? end : start;
+                player.seekTo(target, true);
+                // Pause right on that frame so the exact trim point is
+                // actually visible, rather than continuing to play past it.
+                if (typeof player.pauseVideo === "function") {
+                  player.pauseVideo();
                 }
               },
               {
