@@ -79,6 +79,34 @@ def _is_reusable_media_file(path: Path) -> bool:
     return _audio_duration_seconds(path) is not None
 
 
+def _is_reusable_video_file(path: Path) -> bool:
+    """Like _is_reusable_media_file, but specifically requires a real,
+    decodable VIDEO stream -- not just any readable container-level
+    duration. Used for footage and encoded scene clips specifically,
+    both of which genuinely need a video stream to be usable at all.
+
+    This distinction is what _is_reusable_media_file alone misses: a
+    malformed download (e.g. an audio-only format yt-dlp picked, or a
+    partial merge) can still have a readable container "duration" via
+    ffprobe's generic format=duration query, even with zero video
+    streams inside it -- passing the generic check while being
+    completely useless for encoding. That gap let a broken YouTube
+    clip download get resumed/reused as "already done" on a second
+    attempt, reproducing the exact same ffmpeg failure ("Stream map ''
+    matches no streams") instead of being correctly re-downloaded.
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    try:
+        completed = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        return completed.returncode == 0 and completed.stdout.strip() == "video"
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def scene_background(scene: dict, index: int) -> str:
     """The background this scene will actually render with.
 
@@ -182,7 +210,7 @@ def _render_scene(
     text_color = scene.get("text_color", DEFAULT_TEXT_COLOR)
     outline_color = scene.get("outline_color", DEFAULT_OUTLINE_COLOR)
 
-    if _is_reusable_media_file(scene_path):
+    if _is_reusable_video_file(scene_path):
         # Already fully encoded from an earlier, interrupted attempt at this
         # same project_id -- reuse it as-is rather than redoing the (often
         # much slower) footage download + encode work. Still report progress
@@ -198,7 +226,7 @@ def _render_scene(
     if scene["scene_type"] in {"video", "gif"}:
         selected_video = scene.get("selected_video")
         footage_path = footage_dir / f"scene_{scene_id}.mp4"
-        if _is_reusable_media_file(footage_path):
+        if _is_reusable_video_file(footage_path):
             print(f"Reusing already-downloaded footage for scene {scene_id} (resuming)...")
         elif isinstance(selected_video, dict) and selected_video.get("provider") == "youtube":
             print(f"Downloading YouTube clip for scene {scene_id}...")
