@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FFMPEG_THREADS=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core fonts-noto-color-emoji \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core fonts-noto-color-emoji nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

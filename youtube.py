@@ -64,6 +64,14 @@ def download_youtube_clip(video_id: str, start_seconds: float, end_seconds: floa
         "no_warnings": True,
         "noprogress": True,
         "overwrites": True,
+        # yt-dlp needs to execute some of YouTube's own JavaScript to
+        # resolve/decrypt video-format download URLs (audio formats
+        # apparently don't need this, which is exactly why downloads were
+        # silently succeeding with audio-only output and no video stream
+        # at all, without this ever raising an error on its own). Defaults
+        # to only auto-detecting Deno; Node.js is also a supported runtime
+        # and is what's actually installed in this image (see Dockerfile).
+        "js_runtimes": {"node": {}},
     }
 
     try:
