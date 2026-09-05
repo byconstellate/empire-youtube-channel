@@ -63,6 +63,66 @@ def _tts_friendly_text(text: str) -> str:
     return re.sub(r"\b[A-Z]{2,}\b", lambda m: m.group(0).capitalize(), text)
 
 
+def _split_into_sentences(text: str) -> list[str]:
+    """Split text into sentences for TTS generation, so a long paragraph
+    gets synthesized as several shorter pieces and stitched back together
+    instead of one long generation. Voice-cloning models (especially with
+    a fairly short reference sample) can become less stable the longer a
+    single generation runs; keeping each individual TTS call
+    sentence-length avoids that drift.
+
+    Splits after sentence-ending punctuation (. ! ?), allowing an
+    optional closing quote/paren right after it, only when followed by
+    real whitespace -- this naturally handles ellipses correctly too,
+    since "..." has no whitespace between its own periods, so only the
+    split AFTER the full ellipsis (where real whitespace follows) ever
+    matches, rather than fragmenting at every internal period.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    parts = re.split(r'(?<=[.!?])["\u201d\u2019\')]*\s+', text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _generate_voice_stitched(text: str, output_path: Path, language: str) -> None:
+    """Generate narration for text. If it's more than one sentence, each
+    sentence is synthesized separately and the results stitched into one
+    continuous file at output_path (see _split_into_sentences for why),
+    re-encoding rather than stream-copying the pieces together to avoid
+    the same kind of boundary artifacts a naive concat can introduce.
+    """
+    sentences = _split_into_sentences(text)
+    if len(sentences) <= 1:
+        generate_voice(_tts_friendly_text(text), output_path, language)
+        return
+
+    sentence_paths: list[Path] = []
+    try:
+        for index, sentence in enumerate(sentences):
+            sentence_path = output_path.parent / f"{output_path.stem}_part{index}.mp3"
+            generate_voice(_tts_friendly_text(sentence), sentence_path, language)
+            sentence_paths.append(sentence_path)
+
+        concat_list = output_path.parent / f"{output_path.stem}_concat.txt"
+        concat_list.write_text(
+            "".join(f"file '{p.resolve().as_posix()}'\n" for p in sentence_paths),
+            encoding="utf-8",
+        )
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0",
+                 "-i", str(concat_list), "-c:a", "libmp3lame", str(output_path)],
+                check=True, capture_output=True, text=True,
+            )
+        finally:
+            concat_list.unlink(missing_ok=True)
+    finally:
+        for p in sentence_paths:
+            p.unlink(missing_ok=True)
+
+
+
 def _is_reusable_media_file(path: Path) -> bool:
     """True if path exists and ffprobe can read a real duration from it --
     i.e. it's a complete, non-corrupt file safe to reuse rather than
@@ -341,7 +401,7 @@ def process(script: dict, language: str | None = None, on_progress=None) -> Path
                 print(f"Reusing existing narration for scene {scene_id} (resuming)...")
             else:
                 print(f"\nGenerating voice for scene {scene_id}...")
-                generate_voice(_tts_friendly_text(scene["text"]), audio_path, language)
+                _generate_voice_stitched(scene["text"], audio_path, language)
             audio_paths[scene_id] = audio_path
             measured = _audio_duration_seconds(audio_path)
             if measured is not None:
